@@ -1,4 +1,4 @@
-/*! Mieciu X50 Card v1.0.0 | MIT | https://github.com/voltronicpl/mieciu-x50-card — autorska karta Lovelace */
+/*! Mieciu X50 Card v1.1.0 | MIT | https://github.com/voltronicpl/mieciu-x50-card — autorska karta Lovelace */
 (() => {
 'use strict';
 
@@ -741,6 +741,122 @@ function tankSvg(kind) {
     <g filter="url(#${id}-f)" style="color:${tint[1]}">${body}</g></svg>`;
 }
 
+// ===== src/graphics/parts.js =====
+// Realistyczne (cieniowane 3D) ilustracje części, przebarwione w stylu holo.
+// viewBox 0 0 160 110. Kolor bazowy = currentColor (zmienia się ze stanem).
+// ID gradientów są stałe dla danej części (stabilny DOM przy odświeżaniu).
+let curKey = 'x';
+const D = () => { const i = curKey; return { i, defs: `
+  <linearGradient id="m${i}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#eaf8ff"/><stop offset=".18" stop-color="currentColor" stop-opacity=".95"/><stop offset=".55" stop-color="#0b2a55"/><stop offset=".85" stop-color="currentColor" stop-opacity=".55"/><stop offset="1" stop-color="#03101f"/></linearGradient>
+  <linearGradient id="h${i}" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#03101f"/><stop offset=".35" stop-color="currentColor" stop-opacity=".7"/><stop offset=".5" stop-color="#eaf8ff"/><stop offset=".65" stop-color="currentColor" stop-opacity=".7"/><stop offset="1" stop-color="#03101f"/></linearGradient>
+  <linearGradient id="d${i}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="currentColor" stop-opacity=".55"/><stop offset="1" stop-color="#02070f"/></linearGradient>
+  <radialGradient id="r${i}" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#eaf8ff"/><stop offset=".3" stop-color="currentColor"/><stop offset="1" stop-color="#03101f"/></radialGradient>
+  <filter id="g${i}" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="2.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  <filter id="s${i}" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="5" stdDeviation="4" flood-color="#000" flood-opacity=".7"/></filter>` }; };
+const floor = (cx = 80, cy = 96, rx = 62) => `<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="7" fill="currentColor" opacity=".18"/>`;
+const svg = (body) => `<svg viewBox="0 0 160 110">${body}</svg>`;
+
+const PARTS_RAW = {
+  // Szczotka główna: wałek z gumowymi listwami w „V” + rzędy włosia, szare zaślepki
+  main_brush: () => { const { i, defs } = D(); return svg(`<defs>${defs}
+    <clipPath id="c${i}"><rect x="22" y="38" width="116" height="34" rx="17"/></clipPath></defs>${floor(80, 92, 70)}
+    <g filter="url(#s${i})">
+      <rect x="22" y="38" width="116" height="34" rx="17" fill="url(#m${i})"/>
+      <g clip-path="url(#c${i})">
+        ${Array.from({ length: 9 }, (_, k) => { const x = 18 + k * 14; return `<path d="M${x} 38 L${x + 10} 55 L${x} 72" fill="none" stroke="#02070f" stroke-width="4.5" opacity=".75"/><path d="M${x} 38 L${x + 10} 55 L${x} 72" fill="none" stroke="#eaf8ff" stroke-width="1.2" opacity=".55"/>`; }).join('')}
+        ${Array.from({ length: 9 }, (_, k) => { const x = 25 + k * 14; return Array.from({ length: 6 }, (_, j) => `<line x1="${x + j * 0.9}" y1="${41 + j * 5}" x2="${x + j * 0.9 + 1.5}" y2="${43 + j * 5}" stroke="currentColor" stroke-width="1" opacity=".8"/>`).join(''); }).join('')}
+        <rect x="22" y="40" width="116" height="5" fill="#fff" opacity=".18"/>
+      </g>
+      <path d="M16 40 h10 v30 h-10 a4 4 0 0 1 -4 -4 v-22 a4 4 0 0 1 4 -4z" fill="url(#h${i})"/><rect x="5" y="50" width="9" height="10" rx="2" fill="url(#r${i})"/>
+      <path d="M134 40 h10 a4 4 0 0 1 4 4 v22 a4 4 0 0 1 -4 4 h-10 z" fill="url(#h${i})"/><rect x="146" y="51" width="8" height="8" rx="4" fill="url(#r${i})"/>
+    </g>`); },
+
+  // Szczotka boczna: 5 ramion z kępkami włosia, piasta z kołnierzem
+  side_brush: () => { const { i, defs } = D(); return svg(`<defs>${defs}</defs>${floor(80, 92, 64)}
+    <g filter="url(#s${i})">
+      ${[0, 72, 144, 216, 288].map((a) => { const r = (a - 90) * Math.PI / 180, R = 56, sy = 0.48;
+        const ex = 80 + Math.cos(r) * R, ey = 58 + Math.sin(r) * R * sy, mx = 80 + Math.cos(r + 0.28) * R * 0.55, my = 58 + Math.sin(r + 0.28) * R * 0.55 * sy;
+        const tufts = Array.from({ length: 7 }, (_, t) => { const rr = r + (t - 3) * 0.07; return `<line x1="${mx.toFixed(1)}" y1="${my.toFixed(1)}" x2="${(80 + Math.cos(rr) * (R + 4 + (t % 2) * 4)).toFixed(1)}" y2="${(58 + Math.sin(rr) * (R + 4) * sy).toFixed(1)}" stroke="currentColor" stroke-width="1.1" opacity=".85"/>`; }).join('');
+        return `${tufts}<path d="M80 58 Q${mx.toFixed(1)} ${(my - 3).toFixed(1)} ${ex.toFixed(1)} ${ey.toFixed(1)}" stroke="#02070f" stroke-width="5" fill="none" stroke-linecap="round"/><path d="M80 58 Q${mx.toFixed(1)} ${(my - 3).toFixed(1)} ${((ex + 80) / 2).toFixed(1)} ${((ey + 58) / 2).toFixed(1)}" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round" opacity=".9"/>`; }).join('')}
+      <ellipse cx="80" cy="60" rx="17" ry="9" fill="#02070f"/><ellipse cx="80" cy="57" rx="17" ry="9" fill="url(#m${i})"/>
+      <ellipse cx="80" cy="55" rx="8" ry="4.2" fill="url(#r${i})"/><ellipse cx="77" cy="53.5" rx="3" ry="1.4" fill="#fff" opacity=".7"/>
+    </g>`); },
+
+  // Filtr HEPA: prostokątna ramka z uchwytem, harmonijka plis na wierzchu
+  filter: () => { const { i, defs } = D(); return svg(`<defs>${defs}</defs>${floor(80, 94, 60)}
+    <g filter="url(#s${i})">
+      <path d="M30 50 L108 36 L136 52 L58 68 Z" fill="url(#h${i})"/>
+      <path d="M30 50 L58 68 V86 L30 68 Z" fill="url(#d${i})"/>
+      <path d="M58 68 L136 52 V70 L58 86 Z" fill="url(#m${i})"/>
+      <path d="M38 50.5 L106 38.5 L127 51 L59 63.5 Z" fill="#02070f" opacity=".8"/>
+      ${Array.from({ length: 14 }, (_, k) => { const t = k / 13; const x1 = 38 + t * 68, y1 = 50.5 - t * 12, x2 = 59 + t * 68, y2 = 63.5 - t * 12.5;
+        return `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="currentColor" stroke-width="2.2" opacity="${k % 2 ? 0.55 : 1}"/>`; }).join('')}
+      <path d="M131 55 l9 -2 v9 l-9 2z" fill="url(#r${i})"/>
+      <path d="M30 50 L108 36 L136 52" fill="none" stroke="#eaf8ff" stroke-width="1" opacity=".7"/>
+    </g>`); },
+
+  // Czujniki: robot z wieżyczką LDS, przednim oknem 3D/AI i falami skanowania
+  sensor_dirty: () => { const { i, defs } = D(); return svg(`<defs>${defs}</defs>${floor(80, 92, 66)}
+    <g filter="url(#s${i})">
+      <path d="M22 62 v10 a58 17 0 0 0 116 0 v-10z" fill="url(#h${i})"/>
+      <ellipse cx="80" cy="62" rx="58" ry="17" fill="url(#m${i})"/>
+      <ellipse cx="80" cy="62" rx="48" ry="13" fill="none" stroke="#02070f" stroke-width="1.5" opacity=".6"/>
+      <path d="M34 72 a58 17 0 0 0 30 10" fill="none" stroke="#02070f" stroke-width="6" opacity=".9"/>
+      <rect x="42" y="72" width="16" height="5" rx="2" fill="url(#r${i})" filter="url(#g${i})"/>
+      <path d="M68 58 v-8 a14 5 0 0 1 28 0 v8z" fill="url(#h${i})"/><ellipse cx="82" cy="50" rx="14" ry="5" fill="url(#r${i})"/>
+      <ellipse cx="82" cy="50" rx="8" ry="2.6" fill="none" stroke="#eaf8ff" stroke-width="1.4" filter="url(#g${i})"/>
+    </g>
+    <g fill="none" stroke="currentColor" stroke-linecap="round" filter="url(#g${i})">
+      <path d="M64 36 a22 10 0 0 1 36 0" stroke-width="2"/><path d="M56 27 a32 14 0 0 1 52 0" stroke-width="1.6" opacity=".65"/><path d="M48 18 a42 18 0 0 1 68 0" stroke-width="1.2" opacity=".35"/>
+    </g>`); },
+
+  // Moduł jonów srebra: biała kapsuła z zakrętką i okienkiem z granulatem Ag+
+  silver_ion: () => { const { i, defs } = D(); return svg(`<defs>${defs}</defs>${floor(80, 96, 40)}
+    <g filter="url(#s${i})">
+      <rect x="56" y="30" width="48" height="62" rx="12" fill="url(#h${i})"/>
+      <ellipse cx="80" cy="30" rx="24" ry="7" fill="url(#m${i})"/>
+      <rect x="66" y="14" width="28" height="16" rx="4" fill="url(#h${i})"/><ellipse cx="80" cy="14" rx="14" ry="4" fill="url(#r${i})"/>
+      ${Array.from({ length: 9 }, (_, k) => `<line x1="${68 + k * 3}" y1="17" x2="${68 + k * 3}" y2="29" stroke="#02070f" stroke-width="1" opacity=".5"/>`).join('')}
+      <rect x="66" y="46" width="28" height="34" rx="6" fill="#02070f" opacity=".85"/>
+      ${Array.from({ length: 22 }, (_, k) => `<circle cx="${69 + (k * 7.3) % 22}" cy="${50 + Math.floor(k / 4) * 5.2 + (k % 2) * 1.5}" r="${1.6 + (k % 3) * 0.5}" fill="url(#r${i})"/>`).join('')}
+      <text x="80" y="42" text-anchor="middle" font-size="9" font-weight="800" fill="#02070f" font-family="sans-serif">Ag⁺</text>
+      <rect x="60" y="34" width="4" height="52" rx="2" fill="#fff" opacity=".35"/>
+    </g>`); },
+
+  // Koło napędowe: opona z bieżnikiem, felga i ramię zawieszenia
+  wheel_dirty: () => { const { i, defs } = D(); return svg(`<defs>${defs}</defs>${floor(78, 98, 48)}
+    <g filter="url(#s${i})">
+      <path d="M96 40 L132 30 L138 42 L104 56 Z" fill="url(#m${i})"/><circle cx="134" cy="36" r="5" fill="url(#r${i})"/>
+      <ellipse cx="86" cy="58" rx="24" ry="36" fill="#02070f"/>
+      <path d="M70 22 h16 a24 36 0 0 1 0 72 h-16" fill="url(#h${i})"/>
+      ${Array.from({ length: 13 }, (_, k) => { const a = -Math.PI / 2 + k / 12 * Math.PI; const y = 58 + Math.sin(a) * 36; const x = 86 + Math.cos(a) * 24; return `<path d="M${(x - 16).toFixed(1)} ${y.toFixed(1)} h16" stroke="#02070f" stroke-width="2.6"/>`; }).join('')}
+      <ellipse cx="70" cy="58" rx="24" ry="36" fill="url(#m${i})"/>
+      <ellipse cx="70" cy="58" rx="15" ry="23" fill="#02070f"/>
+      <ellipse cx="70" cy="58" rx="12" ry="19" fill="url(#r${i})"/>
+      ${[0, 1, 2, 3, 4].map((k) => { const a = k / 5 * 2 * Math.PI; return `<line x1="70" y1="58" x2="${(70 + Math.cos(a) * 11).toFixed(1)}" y2="${(58 + Math.sin(a) * 17).toFixed(1)}" stroke="#02070f" stroke-width="2.4"/>`; }).join('')}
+      <ellipse cx="70" cy="58" rx="4" ry="6" fill="#eaf8ff" opacity=".85"/>
+    </g>`); },
+
+  // Środek do kamienia: wkład/butelka stacji z nakrętką, oknem poziomu i kroplą
+  scale_inhibitor: () => { const { i, defs } = D(); return svg(`<defs>${defs}</defs>${floor(80, 96, 44)}
+    <g filter="url(#s${i})">
+      <path d="M50 34 h60 l8 10 v42 a8 8 0 0 1 -8 8 h-60 a8 8 0 0 1 -8 -8 v-42z" fill="url(#h${i})"/>
+      <path d="M50 34 h60 l8 10 h-76z" fill="url(#m${i})"/>
+      <rect x="66" y="18" width="28" height="16" rx="4" fill="url(#h${i})"/><ellipse cx="80" cy="18" rx="14" ry="4" fill="url(#r${i})"/>
+      <rect x="54" y="52" width="10" height="34" rx="4" fill="#02070f" opacity=".85"/><rect x="56" y="64" width="6" height="20" rx="3" fill="currentColor" filter="url(#g${i})"/>
+      <path d="M90 56 q-12 15 0 24 q12 -9 0 -24z" fill="url(#r${i})" filter="url(#g${i})"/>
+      ${[[74, 62], [104, 64], [100, 80]].map(([x, y]) => `<path d="M${x - 3} ${y} l3 -3 l3 3 l-3 3z" fill="#eaf8ff" opacity=".7"/>`).join('')}
+      <rect x="46" y="46" width="4" height="40" rx="2" fill="#fff" opacity=".3"/>
+    </g>`); },
+};
+
+function partSvg(key) {
+  const f = PARTS_RAW[key];
+  if (!f) return '';
+  curKey = `mxp-${key}`;
+  return f();
+}
+
 // ===== src/styles.js =====
 const STYLES = `
 :host {
@@ -1143,10 +1259,39 @@ ha-icon { --mdc-icon-size: 20px; display: inline-flex; width: var(--mdc-icon-siz
 
 .big.primary { background: linear-gradient(180deg, rgba(14,32,66,.9), rgba(6,16,36,.9)); box-shadow: 0 0 0 1px var(--mx-line), 0 0 16px rgba(31,125,255,.15) inset; }
 .big.primary.lit { background: linear-gradient(180deg, #2a8bff, #0b52d0); box-shadow: 0 0 0 1px var(--mx-line-strong), 0 0 28px rgba(31,125,255,.7); }
+
+/* zakładka Serwis — ilustracje części */
+.svc-full { display:grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 12px; }
+.svc-big { display:grid; grid-template-columns: 160px minmax(0,1fr) auto; gap: 14px; align-items:center; padding: 12px 14px; border-radius: 12px; background: rgba(6,16,36,.75); box-shadow: 0 0 0 1px var(--mx-line); --pc: #4cc8ff; }
+.svc-big.l-mid { box-shadow: 0 0 0 1px rgba(255,181,71,.7); --pc: #ffae3d; }
+.svc-big.l-bad { box-shadow: 0 0 0 1px var(--mx-bad), 0 0 14px rgba(255,90,110,.35); --pc: #ff5a72; }
+.svc-big.l-unk { --pc: #7f9bbd; }
+.sb-art { height: 110px; border-radius: 10px; display:grid; place-items:center; overflow:hidden; color: var(--pc);
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--pc) 22%, transparent), transparent),
+    repeating-linear-gradient(0deg, rgba(63,216,255,.06) 0 1px, transparent 1px 12px), repeating-linear-gradient(90deg, rgba(63,216,255,.06) 0 1px, transparent 1px 12px);
+  box-shadow: 0 0 0 1px rgba(64,170,255,.25) inset; }
+.sb-art svg { width: 160px; height: 110px; transform: scale(1.15); }
+.sb-txt b { display:block; font-size: 17px; font-weight: 600; } .sb-txt span { display:block; font-size: 13px; color: var(--mx-dim); margin-top: 2px; }
+.sb-st { display:inline-block; font-style: normal; margin-top: 8px; font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 7px; color: var(--mx-ok); background: rgba(56,229,155,.14); box-shadow: 0 0 0 1px rgba(56,229,155,.5); }
+.l-mid .sb-st { color: var(--mx-warn); background: rgba(255,181,71,.14); box-shadow: 0 0 0 1px rgba(255,181,71,.5); }
+.l-bad .sb-st { color: var(--mx-bad); background: rgba(255,90,110,.14); box-shadow: 0 0 0 1px rgba(255,90,110,.5); }
+.l-unk .sb-st { color: var(--mx-dim); background: none; box-shadow: 0 0 0 1px var(--mx-line); }
+.sb-txt .rst { display:block; margin-top: 10px; }
+.svc-big .ring { width: 84px; height: 84px; }
+@container (max-width: 640px) { .svc-full { grid-template-columns: 1fr; } .svc-big { grid-template-columns: 110px minmax(0,1fr) auto; } .sb-art { height: 84px; } .sb-art svg { width: 110px; height: 80px; } .svc-big .ring { width: 64px; height: 64px; } }
+
+/* obrazek Miecia zależny od stanu */
+.rp-photo { position: relative; }
+.rp-photo.k-dock img { width: auto; max-width: 100%; height: 150px; object-fit: contain; margin: 0 auto; -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 10%, #000 90%, transparent 100%), linear-gradient(0deg, transparent 0, #000 8%); mask-image: linear-gradient(90deg, transparent 0, #000 10%, #000 90%, transparent 100%); filter: drop-shadow(0 0 10px rgba(63,216,255,.35)); }
+.rp-photo.k-idle img { width: 78%; margin: 6px auto 0; position: relative; z-index: 1; filter: drop-shadow(0 8px 10px rgba(0,0,0,.6)); }
+.rp-photo.k-idle .rp-floor { position:absolute; left: 12%; right: 12%; bottom: -2px; height: 26%; border-radius: 50%; background: radial-gradient(closest-side, rgba(63,216,255,.55), rgba(31,125,255,.18) 60%, transparent); }
+.rp-photo.v-error img, .rp-photo.v-unavailable img { filter: grayscale(.85) brightness(.7); }
+.rp-photo.v-paused img { filter: drop-shadow(0 0 8px rgba(255,181,71,.45)); }
 `;
 
 // ===== src/views/views.js =====
 // Widoki karty (układ 1:1 z zatwierdzonym mockupem). Tylko HTML, bez wywołań usług.
+
 
 
 
@@ -1391,7 +1536,13 @@ function renderRobot(c, visual) {
   <section class="panel robot-panel">
     <div class="rp-hero">
       <div class="rp-name">${c.config.graphics === 'svg' ? '' : `<img class="rp-mini" src="${esc(c.config.robot_image || ASSETS.robot_top)}" alt="">`}<div><b>${esc(c.config.name || 'Mieciu')}</b><small>${esc(c.config.model || 'Dreame X50 Ultra')}</small></div></div>
-      ${c.config.graphics === 'svg' ? heroRobotSvg(visual, { sparks: visual === 'cleaning', image: c.config.robot_image }) : `<div class="rp-photo v-${visual}"><img src="${esc(c.config.robot_image || ASSETS.robot)}" alt=""></div>`}
+      ${c.config.graphics === 'svg' ? heroRobotSvg(visual, { sparks: visual === 'cleaning', image: c.config.robot_image }) : (() => {
+        // sprząta -> robot w akcji; w stacji / mycie / suszenie / opróżnianie -> robot w stacji; reszta -> robot stojący
+        const inDock = ['docked', 'washing', 'drying', 'auto_empty'].includes(visual);
+        const img = visual === 'cleaning' ? (c.config.robot_image || ASSETS.robot) : inDock ? (c.config.station_image || ASSETS.station) : ASSETS.robot_top;
+        const kind = visual === 'cleaning' ? 'run' : inDock ? 'dock' : 'idle';
+        return `<div class="rp-photo v-${visual} k-${kind}"><img src="${esc(img)}" alt="">${kind === 'idle' ? '<i class="rp-floor"></i>' : ''}</div>`;
+      })()}
     </div>
     <div class="rp-info">
       <div class="rp-now">${icon(visual === 'cleaning' ? 'mdi:battery-charging-high' : 'mdi:information-outline')}<div><span>${headLab}</span><b>${esc(headVal)}</b></div></div>
@@ -1563,6 +1714,15 @@ function renderService(c, full = false) {
     const left = c.st(`svc_${k}_left`), time = c.st(`svc_${k}_time`), rst = c.st(`svc_${k}_reset`);
     const unit = time?.attributes?.unit_of_measurement || '';
     const tl = time && !isUnavail(time) ? `${fmtNum(toNum(time.state))} ${unit}` : '—';
+    if (full) {
+      const n = isUnavail(left) ? null : toNum(left.state);
+      const lvl = n === null ? 'unk' : n > 50 ? 'ok' : n > 20 ? 'mid' : 'bad';
+      const st = n === null ? 'Brak danych' : n > 50 ? 'OK' : n > 20 ? 'Wkrótce wymiana' : (['wheel_dirty', 'sensor_dirty'].includes(k) ? 'Wyczyść' : 'Wymień');
+      return `<div class="svc-big l-${lvl}"><div class="sb-art">${partSvg(k)}</div>
+        <div class="sb-txt"><b>${esc(SVC_LABEL[k])}</b><span>Pozostało: ${esc(tl)}</span><i class="sb-st">${st}</i>
+          ${rst && rst.state !== 'unavailable' ? `<button class="rst" data-act="press" data-entity="${esc(rst.entity_id)}" data-label="Reset: ${esc(SVC_LABEL[k])}">Resetuj</button>` : ''}</div>
+        ${ring(n)}</div>`;
+    }
     return `<div class="svc-item">${ring(isUnavail(left) ? null : left.state, tl)}<b>${esc(SVC_LABEL[k])}</b>
       <small>${esc(tl)}</small>
       ${full && rst && rst.state !== 'unavailable' ? `<button class="rst" data-act="press" data-entity="${esc(rst.entity_id)}" data-label="Reset: ${esc(SVC_LABEL[k])}">Resetuj</button>` : ''}</div>`;
@@ -1570,8 +1730,8 @@ function renderService(c, full = false) {
   const items2 = maint?.state === 'on' ? pyParse(maint.attributes?.items) : null;
   return `
   <section class="panel svc-panel">
-    <h3 class="ptitle"><span>Serwis i konserwacja</span>${maint?.state === 'on' ? `<span class="warn small">${icon('mdi:wrench-clock')} ${Array.isArray(items2) ? items2.map((x) => SVC_LABEL[`${x}_dirty`] || SVC_LABEL[x] || x).join(', ') : 'wymaga uwagi'}</span>` : ''}</h3>
-    <div class="svc">${items || '<span class="dim">Brak danych</span>'}</div>
+    <h3 class="ptitle"><span>Serwis i konserwacja</span>${maint?.state === 'on' ? `<span class="warn small">${icon('mdi:wrench-clock')} ${Array.isArray(items2) ? items2.map((x) => SVC_LABEL[`${x}_dirty`] || SVC_LABEL[x] || x).join(', ') : 'wymaga uwagi'}${full ? ' — wymaga uwagi' : ''}</span>` : ''}</h3>
+    <div class="${full ? 'svc-full' : 'svc'}">${items || '<span class="dim">Brak danych</span>'}</div>
   </section>`;
 }
 
@@ -1657,7 +1817,7 @@ function renderRoomDetails(c) {
 
 
 
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 
 // Minimalny „morph”: aktualizuje istniejący DOM do nowego HTML bez jego
 // przebudowy. Zachowuje obrazki, canvas mapy, fokus i wysokość karty.

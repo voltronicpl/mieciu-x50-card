@@ -7,6 +7,7 @@ import { stationSvg, heroRobotSvg, tankSvg } from '../graphics/station.js';
 import { tankStatus, STATION_ACTIVE } from '../state/visual-state.js';
 import { buildTransform, getRooms, getRobotPosition, getChargerPosition } from '../adapter/map.js';
 import { ASSETS } from '../graphics/assets.js';
+import { partSvg } from '../graphics/parts.js';
 import { NEON } from '../adapter/map-render.js';
 
 const icon = (i, cls = '') => `<ha-icon class="${cls}" icon="${esc(i)}"></ha-icon>`;
@@ -244,7 +245,13 @@ export function renderRobot(c, visual) {
   <section class="panel robot-panel">
     <div class="rp-hero">
       <div class="rp-name">${c.config.graphics === 'svg' ? '' : `<img class="rp-mini" src="${esc(c.config.robot_image || ASSETS.robot_top)}" alt="">`}<div><b>${esc(c.config.name || 'Mieciu')}</b><small>${esc(c.config.model || 'Dreame X50 Ultra')}</small></div></div>
-      ${c.config.graphics === 'svg' ? heroRobotSvg(visual, { sparks: visual === 'cleaning', image: c.config.robot_image }) : `<div class="rp-photo v-${visual}"><img src="${esc(c.config.robot_image || ASSETS.robot)}" alt=""></div>`}
+      ${c.config.graphics === 'svg' ? heroRobotSvg(visual, { sparks: visual === 'cleaning', image: c.config.robot_image }) : (() => {
+        // sprząta -> robot w akcji; w stacji / mycie / suszenie / opróżnianie -> robot w stacji; reszta -> robot stojący
+        const inDock = ['docked', 'washing', 'drying', 'auto_empty'].includes(visual);
+        const img = visual === 'cleaning' ? (c.config.robot_image || ASSETS.robot) : inDock ? (c.config.station_image || ASSETS.station) : ASSETS.robot_top;
+        const kind = visual === 'cleaning' ? 'run' : inDock ? 'dock' : 'idle';
+        return `<div class="rp-photo v-${visual} k-${kind}"><img src="${esc(img)}" alt="">${kind === 'idle' ? '<i class="rp-floor"></i>' : ''}</div>`;
+      })()}
     </div>
     <div class="rp-info">
       <div class="rp-now">${icon(visual === 'cleaning' ? 'mdi:battery-charging-high' : 'mdi:information-outline')}<div><span>${headLab}</span><b>${esc(headVal)}</b></div></div>
@@ -416,6 +423,15 @@ export function renderService(c, full = false) {
     const left = c.st(`svc_${k}_left`), time = c.st(`svc_${k}_time`), rst = c.st(`svc_${k}_reset`);
     const unit = time?.attributes?.unit_of_measurement || '';
     const tl = time && !isUnavail(time) ? `${fmtNum(toNum(time.state))} ${unit}` : '—';
+    if (full) {
+      const n = isUnavail(left) ? null : toNum(left.state);
+      const lvl = n === null ? 'unk' : n > 50 ? 'ok' : n > 20 ? 'mid' : 'bad';
+      const st = n === null ? 'Brak danych' : n > 50 ? 'OK' : n > 20 ? 'Wkrótce wymiana' : (['wheel_dirty', 'sensor_dirty'].includes(k) ? 'Wyczyść' : 'Wymień');
+      return `<div class="svc-big l-${lvl}"><div class="sb-art">${partSvg(k)}</div>
+        <div class="sb-txt"><b>${esc(SVC_LABEL[k])}</b><span>Pozostało: ${esc(tl)}</span><i class="sb-st">${st}</i>
+          ${rst && rst.state !== 'unavailable' ? `<button class="rst" data-act="press" data-entity="${esc(rst.entity_id)}" data-label="Reset: ${esc(SVC_LABEL[k])}">Resetuj</button>` : ''}</div>
+        ${ring(n)}</div>`;
+    }
     return `<div class="svc-item">${ring(isUnavail(left) ? null : left.state, tl)}<b>${esc(SVC_LABEL[k])}</b>
       <small>${esc(tl)}</small>
       ${full && rst && rst.state !== 'unavailable' ? `<button class="rst" data-act="press" data-entity="${esc(rst.entity_id)}" data-label="Reset: ${esc(SVC_LABEL[k])}">Resetuj</button>` : ''}</div>`;
@@ -423,8 +439,8 @@ export function renderService(c, full = false) {
   const items2 = maint?.state === 'on' ? pyParse(maint.attributes?.items) : null;
   return `
   <section class="panel svc-panel">
-    <h3 class="ptitle"><span>Serwis i konserwacja</span>${maint?.state === 'on' ? `<span class="warn small">${icon('mdi:wrench-clock')} ${Array.isArray(items2) ? items2.map((x) => SVC_LABEL[`${x}_dirty`] || SVC_LABEL[x] || x).join(', ') : 'wymaga uwagi'}</span>` : ''}</h3>
-    <div class="svc">${items || '<span class="dim">Brak danych</span>'}</div>
+    <h3 class="ptitle"><span>Serwis i konserwacja</span>${maint?.state === 'on' ? `<span class="warn small">${icon('mdi:wrench-clock')} ${Array.isArray(items2) ? items2.map((x) => SVC_LABEL[`${x}_dirty`] || SVC_LABEL[x] || x).join(', ') : 'wymaga uwagi'}${full ? ' — wymaga uwagi' : ''}</span>` : ''}</h3>
+    <div class="${full ? 'svc-full' : 'svc'}">${items || '<span class="dim">Brak danych</span>'}</div>
   </section>`;
 }
 

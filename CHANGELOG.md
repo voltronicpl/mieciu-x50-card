@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.1.0] — 2026-10-29
+### Dodane
+- Zakładka Serwis: ilustracje części 3D (szczotka główna, boczna, filtr, czujniki, jony srebra, koła, środek do kamienia), kolor wg stanu, status OK / Wkrótce wymiana / Wymień / Wyczyść.
+- Obrazek Miecia zależny od stanu: w stacji (też mycie, suszenie, opróżnianie), sprząta (z iskrami), bezczynny / pauza / powrót (stojący, bez iskier).
+
 ## [1.0.0] — 2026-10-29
 ### Zmienione
 - Wygląd 1:1 z mockupem: ramki HUD, ikony, pierścienie serwisu, przełączniki CleanGenius.

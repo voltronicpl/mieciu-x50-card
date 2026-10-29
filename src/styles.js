@@ -399,4 +399,32 @@ ha-icon { --mdc-icon-size: 20px; display: inline-flex; width: var(--mdc-icon-siz
 
 .big.primary { background: linear-gradient(180deg, rgba(14,32,66,.9), rgba(6,16,36,.9)); box-shadow: 0 0 0 1px var(--mx-line), 0 0 16px rgba(31,125,255,.15) inset; }
 .big.primary.lit { background: linear-gradient(180deg, #2a8bff, #0b52d0); box-shadow: 0 0 0 1px var(--mx-line-strong), 0 0 28px rgba(31,125,255,.7); }
+
+/* zakładka Serwis — ilustracje części */
+.svc-full { display:grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 12px; }
+.svc-big { display:grid; grid-template-columns: 160px minmax(0,1fr) auto; gap: 14px; align-items:center; padding: 12px 14px; border-radius: 12px; background: rgba(6,16,36,.75); box-shadow: 0 0 0 1px var(--mx-line); --pc: #4cc8ff; }
+.svc-big.l-mid { box-shadow: 0 0 0 1px rgba(255,181,71,.7); --pc: #ffae3d; }
+.svc-big.l-bad { box-shadow: 0 0 0 1px var(--mx-bad), 0 0 14px rgba(255,90,110,.35); --pc: #ff5a72; }
+.svc-big.l-unk { --pc: #7f9bbd; }
+.sb-art { height: 110px; border-radius: 10px; display:grid; place-items:center; overflow:hidden; color: var(--pc);
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--pc) 22%, transparent), transparent),
+    repeating-linear-gradient(0deg, rgba(63,216,255,.06) 0 1px, transparent 1px 12px), repeating-linear-gradient(90deg, rgba(63,216,255,.06) 0 1px, transparent 1px 12px);
+  box-shadow: 0 0 0 1px rgba(64,170,255,.25) inset; }
+.sb-art svg { width: 160px; height: 110px; transform: scale(1.15); }
+.sb-txt b { display:block; font-size: 17px; font-weight: 600; } .sb-txt span { display:block; font-size: 13px; color: var(--mx-dim); margin-top: 2px; }
+.sb-st { display:inline-block; font-style: normal; margin-top: 8px; font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 7px; color: var(--mx-ok); background: rgba(56,229,155,.14); box-shadow: 0 0 0 1px rgba(56,229,155,.5); }
+.l-mid .sb-st { color: var(--mx-warn); background: rgba(255,181,71,.14); box-shadow: 0 0 0 1px rgba(255,181,71,.5); }
+.l-bad .sb-st { color: var(--mx-bad); background: rgba(255,90,110,.14); box-shadow: 0 0 0 1px rgba(255,90,110,.5); }
+.l-unk .sb-st { color: var(--mx-dim); background: none; box-shadow: 0 0 0 1px var(--mx-line); }
+.sb-txt .rst { display:block; margin-top: 10px; }
+.svc-big .ring { width: 84px; height: 84px; }
+@container (max-width: 640px) { .svc-full { grid-template-columns: 1fr; } .svc-big { grid-template-columns: 110px minmax(0,1fr) auto; } .sb-art { height: 84px; } .sb-art svg { width: 110px; height: 80px; } .svc-big .ring { width: 64px; height: 64px; } }
+
+/* obrazek Miecia zależny od stanu */
+.rp-photo { position: relative; }
+.rp-photo.k-dock img { width: auto; max-width: 100%; height: 150px; object-fit: contain; margin: 0 auto; -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 10%, #000 90%, transparent 100%), linear-gradient(0deg, transparent 0, #000 8%); mask-image: linear-gradient(90deg, transparent 0, #000 10%, #000 90%, transparent 100%); filter: drop-shadow(0 0 10px rgba(63,216,255,.35)); }
+.rp-photo.k-idle img { width: 78%; margin: 6px auto 0; position: relative; z-index: 1; filter: drop-shadow(0 8px 10px rgba(0,0,0,.6)); }
+.rp-photo.k-idle .rp-floor { position:absolute; left: 12%; right: 12%; bottom: -2px; height: 26%; border-radius: 50%; background: radial-gradient(closest-side, rgba(63,216,255,.55), rgba(31,125,255,.18) 60%, transparent); }
+.rp-photo.v-error img, .rp-photo.v-unavailable img { filter: grayscale(.85) brightness(.7); }
+.rp-photo.v-paused img { filter: drop-shadow(0 0 8px rgba(255,181,71,.45)); }
 `;

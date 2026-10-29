@@ -13,6 +13,7 @@ const order = [
   'src/graphics/assets.js',
   'src/state/visual-state.js',
   'src/graphics/station.js',
+  'src/graphics/parts.js',
   'src/styles.js',
   'src/views/views.js',
   'src/mieciu-x50-card.js',
