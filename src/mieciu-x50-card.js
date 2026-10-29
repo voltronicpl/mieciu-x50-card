@@ -59,6 +59,13 @@ class MieciuX50Card extends HTMLElement {
   getGridOptions() { return { columns: 'full', min_columns: 6 }; }
 
   connectedCallback() {
+    // krój pisma jak w mockupie (font-face musi być w dokumencie, nie w shadow DOM)
+    if (this._config?.font !== false && !document.getElementById('mieciu-x50-font')) {
+      const l = document.createElement('link');
+      l.id = 'mieciu-x50-font'; l.rel = 'stylesheet';
+      l.href = 'https://fonts.googleapis.com/css2?family=Saira+Semi+Condensed:wght@400;500;600;700&display=swap';
+      document.head.appendChild(l);
+    }
     this._clock = setInterval(() => this._schedule(), 30000);
   }
   disconnectedCallback() { clearInterval(this._clock); }
@@ -149,6 +156,7 @@ class MieciuX50Card extends HTMLElement {
         const T = buildTransform(c.cam?.attributes?.calibration_points);
         const rooms = getRooms(c.vac, c.cam);
         this._neon = T ? renderNeonMap(pre, rooms, T) : null;
+        this._neonMask = null;
         if (this._neon) { this._neon.canvas.className = 'neon'; this._ui.areas = this._neon.areas; }
         const dims = { w: pre.naturalWidth, h: pre.naturalHeight, areas: this._neon?.areas, pxPerM: this._neon?.pxPerM };
         const changed = !this._mapDims || dims.w !== this._mapDims.w || dims.h !== this._mapDims.h;
@@ -161,6 +169,15 @@ class MieciuX50Card extends HTMLElement {
     const useNeon = this._ui.holo && this._neon;
     this._mapImg.className = this._ui.holo && !this._neon ? 'holo' : '';
     slot.appendChild(useNeon ? this._neon.canvas : this._mapImg);
+    if (useNeon) {
+      // wiązka skanera tylko na kształcie mapy
+      if (!this._neonMask) { try { this._neonMask = this._neon.canvas.toDataURL(); } catch (_) { this._neonMask = ''; } }
+      const scan = document.createElement('div');
+      scan.className = 'holo-scan';
+      scan.innerHTML = '<i></i>';
+      if (this._neonMask) scan.style.setProperty('--mask', `url(${this._neonMask})`);
+      slot.appendChild(scan);
+    }
     this._applyView();
   }
 
@@ -189,7 +206,7 @@ class MieciuX50Card extends HTMLElement {
       const rot = this._mapRot();
       const sw = rot % 180 === 0;
       const bw = sw ? bb.x1 - bb.x0 : bb.y1 - bb.y0, bh = sw ? bb.y1 - bb.y0 : bb.x1 - bb.x0;
-      const z = this._ui.map3d ? Math.min(vw / bw, vh / bh) * 0.82 : Math.min(vw / bw, vh / bh) * 0.92;
+      const z = this._ui.map3d ? Math.min(vw / bw, vh / bh) * 0.98 : Math.min(vw / bw, vh / bh) * 0.92;
       const dx = (bb.x0 + bb.x1) / 2 - w / 2, dy = (bb.y0 + bb.y1) / 2 - h / 2;
       const rad = (rot * Math.PI) / 180;
       const rx = dx * Math.cos(rad) - dy * Math.sin(rad), ry = dx * Math.sin(rad) + dy * Math.cos(rad);
@@ -201,7 +218,7 @@ class MieciuX50Card extends HTMLElement {
       const rot = this._mapRot();
       m3.style.transform = this._ui.map3d ? `perspective(2400px) rotateX(42deg) rotateZ(${rot - 20}deg)` : `rotate(${rot}deg)`;
       const cmp = this.shadowRoot.querySelector('.compass');
-      if (cmp) cmp.style.transform = `rotate(${rot + (this._ui.map3d ? -20 : 0)}deg)`;
+
     }
     stage.style.width = `${w}px`;
     stage.style.height = `${h}px`;

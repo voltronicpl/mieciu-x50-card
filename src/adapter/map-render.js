@@ -77,6 +77,18 @@ export function renderNeonMap(img, rooms, T) {
   const colors = rooms.map((r) => hexToRgb(NEON[((r.color ?? r.id) % NEON.length + NEON.length) % NEON.length]));
   const grid = Math.max(4, Math.round(pxPerM / 4)); // kratka co 25 cm
   let bx0 = w, by0 = h, bx1 = 0, by1 = 0;
+  // odległość od krawędzi pokoju (chamfer, max G px) -> wewnętrzna poświata
+  const G = Math.max(6, Math.round(pxPerM * 0.35));
+  const dist = new Uint8Array(N).fill(255);
+  for (let k = 0; k < N; k++) {
+    const own = owner[k];
+    if (own < 0) { dist[k] = 0; continue; }
+    const x = k % w;
+    if ((x > 0 && owner[k - 1] !== own) || (x < w - 1 && owner[k + 1] !== own) || (k >= w && owner[k - w] !== own) || (k < N - w && owner[k + w] !== own)) dist[k] = 1;
+  }
+  for (let k = 0; k < N; k++) { const x = k % w; let d = dist[k]; if (x > 0) d = Math.min(d, dist[k - 1] + 1); if (k >= w) d = Math.min(d, dist[k - w] + 1); dist[k] = d; }
+  for (let k = N - 1; k >= 0; k--) { const x = k % w; let d = dist[k]; if (x < w - 1) d = Math.min(d, dist[k + 1] + 1); if (k < N - w) d = Math.min(d, dist[k + w] + 1); dist[k] = d; }
+
   for (let k = 0; k < N; k++) {
     const own = owner[k];
     const x = k % w, y = (k - x) / w;
@@ -84,17 +96,24 @@ export function renderNeonMap(img, rooms, T) {
       if (x < bx0) bx0 = x; if (x > bx1) bx1 = x; if (y < by0) by0 = y; if (y > by1) by1 = y;
       areas.set(own, (areas.get(own) || 0) + 1);
       const [r, g, b] = colors[own];
-      const edge = (x > 0 && owner[k - 1] !== own) || (x < w - 1 && owner[k + 1] !== own) || (k >= w && owner[k - w] !== own) || (k < N - w && owner[k + w] !== own);
+      const d = dist[k];
       const onGrid = x % grid === 0 || y % grid === 0;
-      const a = edge ? 255 : onGrid ? 190 : 115;
-      const m = edge ? 1.35 : onGrid ? 1.1 : 0.85;
-      o[k * 4] = Math.min(255, r * m + (edge ? 60 : 0)); o[k * 4 + 1] = Math.min(255, g * m + (edge ? 60 : 0)); o[k * 4 + 2] = Math.min(255, b * m + (edge ? 60 : 0)); o[k * 4 + 3] = a;
-    } else {
+      const scan = y % 3 === 0;
+      let a, m, wht;
+      if (d <= 2) { a = 255; m = 1.25; wht = d === 1 ? 140 : 70; }          // świecąca krawędź
+      else if (d <= G) { const t = 1 - (d - 2) / (G - 2); a = 70 + 150 * t * t; m = 1 + 0.35 * t; wht = 30 * t; } // poświata do środka
+      else { a = 105; m = 0.95; wht = 0; }                                       // przezroczyste wnętrze
+      if (onGrid && d > 2) { a = Math.max(a, 165); m += 0.2; wht += 25; }
+      if (scan && d > 2) a *= 0.72;                                             // linie skanowania
+      o[k * 4] = Math.min(255, r * m + wht); o[k * 4 + 1] = Math.min(255, g * m + wht); o[k * 4 + 2] = Math.min(255, b * m + wht); o[k * 4 + 3] = a;
+      continue;
+    }
+    {
       const c = px(k);
       if (c[3] < 20 || near(c, bg, 12)) continue;
       const lum = (c[0] + c[1] + c[2]) / 3;
-      if (lum < 140) { // ściany / przeszkody -> jasny cyjan
-        o[k * 4] = 120; o[k * 4 + 1] = 230; o[k * 4 + 2] = 255; o[k * 4 + 3] = 235;
+      if (lum < 140) { // ściany / przeszkody -> biało‑cyjanowy neon
+        o[k * 4] = 190; o[k * 4 + 1] = 245; o[k * 4 + 2] = 255; o[k * 4 + 3] = 255;
       } else { // pozostałe znane obszary (korytarze bez segmentu itp.)
         o[k * 4] = 40; o[k * 4 + 1] = 120; o[k * 4 + 2] = 255; o[k * 4 + 3] = 60;
       }

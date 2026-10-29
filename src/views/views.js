@@ -47,8 +47,8 @@ export function renderTop(c, visual) {
     <div class="tele">
       ${chip(batt === null ? 'mdi:battery-unknown' : chg === 'charging' ? 'mdi:battery-charging' : 'mdi:battery', batt === null ? '—' : `${batt}%`, battLab, 'c-batt')}
       ${chip('mdi:home', PL.visual[visual] || '—', 'Stan', 'c-home')}
-      ${chip('mdi:map-plus', a.selected_map || '—', 'Aktualna mapa')}
-      ${chip('mdi:vector-square', c.st('total_area') ? `${fmtNum(toNum(c.st('total_area').state))} m²` : '—', 'Łącznie')}
+      ${chip('mdi:plus-box-outline', a.selected_map || '—', 'Aktualna mapa')}
+      ${chip('mdi:crop-free', c.st('total_area') ? `${fmtNum(toNum(c.st('total_area').state))} m²` : '—', 'Łącznie')}
       ${chip('mdi:sync', c.st('cleaning_count') ? fmtNum(toNum(c.st('cleaning_count').state)) : '—', 'Cykli')}
       ${chip('mdi:clock-outline', c.st('cleaning_time') && !isUnavail(c.st('cleaning_time')) ? fmtMinutes(c.st('cleaning_time').state) : '—', 'Ostatnie sprzątanie')}
     </div>
@@ -68,8 +68,8 @@ export function renderErrorBanner(c) {
 }
 
 const TABS = [
-  ['map', 'mdi:map-legend', 'Mapa'], ['cleaning', 'mdi:hand-back-right-outline', 'Sprzątanie'], ['station', 'mdi:home-floor-g', 'Stacja'],
-  ['service', 'mdi:tools', 'Serwis'], ['history', 'mdi:calendar-clock', 'Historia'], ['settings', 'mdi:tune-variant', 'Ustawienia'],
+  ['map', 'mdi:map-legend', 'Mapa'], ['cleaning', 'mdi:spray-bottle', 'Sprzątanie'], ['station', 'mdi:dishwasher', 'Stacja'],
+  ['service', 'mdi:tools', 'Serwis'], ['history', 'mdi:clipboard-text-clock-outline', 'Historia'], ['settings', 'mdi:cog-outline', 'Ustawienia'],
 ];
 export function renderNav(tab) {
   return `<nav class="nav panel">${TABS.map(([k, ic, lab]) =>
@@ -140,7 +140,7 @@ export function renderMap(c, dims) {
 // ---------- stacja ----------
 function stationProcesses(c, visual) {
   const a = c.vac?.attributes || {};
-  const row = (ic, label, val, cls) => `<div class="proc-item ${cls}">${icon(ic)}<div><span>${esc(label)}</span><b>${esc(val)}</b></div></div>`;
+  const row = (ic, label, val, cls) => `<div class="proc-item ${cls}"><span class="pi">${icon(ic)}</span><div><span>${esc(label)}</span><b>${esc(val)}</b></div></div>`;
   const out = [];
   const base = c.st('self_wash_base_status');
   const err = c.st('error');
@@ -223,7 +223,7 @@ export function renderRobot(c, visual) {
   return `
   <section class="panel robot-panel">
     <div class="rp-hero">
-      <div class="rp-name"><b>${esc(c.config.name || 'Mieciu')}</b><small>${esc(c.config.model || 'Dreame X50 Ultra')}</small></div>
+      <div class="rp-name">${c.config.graphics === 'svg' ? '' : `<img class="rp-mini" src="${esc(c.config.robot_image || ASSETS.robot_top)}" alt="">`}<div><b>${esc(c.config.name || 'Mieciu')}</b><small>${esc(c.config.model || 'Dreame X50 Ultra')}</small></div></div>
       ${c.config.graphics === 'svg' ? heroRobotSvg(visual, { sparks: visual === 'cleaning', image: c.config.robot_image }) : `<div class="rp-photo v-${visual}"><img src="${esc(c.config.robot_image || ASSETS.robot)}" alt=""></div>`}
     </div>
     <div class="rp-info">
@@ -253,7 +253,9 @@ function optTiles(c, key, cls = '') {
   const so = c.st(key);
   if (!so) return '<span class="dim">brak encji</span>';
   if (isUnavail(so)) return `<span class="dim">${PL.generic.unavailable}</span>`;
-  return `<div class="opts ${cls}">${opts(so).map((o) =>
+  const ORDER = ['sweeping', 'sweeping_and_mopping', 'mopping', 'mopping_after_sweeping'];
+  const list = [...opts(so)].sort((a, b) => (ORDER.indexOf(a) + 1 || 99) - (ORDER.indexOf(b) + 1 || 99));
+  return `<div class="opts ${cls}">${list.map((o) =>
     `<button class="opt ${so.state === o ? 'active' : ''}" data-act="select" data-entity="${esc(so.entity_id)}" data-option="${esc(o)}">${icon(OPT_ICONS[o] || 'mdi:circle-medium')}<span>${esc(optLabel(o))}</span></button>`).join('')}</div>`;
 }
 

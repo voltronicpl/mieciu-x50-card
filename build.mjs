@@ -31,4 +31,5 @@ out = out.replace("const VERSION = '0.1.0';", `const VERSION = '${pkg.version}';
 out += '\n})();\n';
 mkdirSync('dist', { recursive: true });
 writeFileSync('dist/mieciu-x50-card.js', out);
+import('node:child_process').then(({ execFileSync }) => execFileSync(process.execPath, ['--check', 'dist/mieciu-x50-card.js'], { stdio: 'inherit' }));
 console.log(`dist/mieciu-x50-card.js  ${(out.length / 1024).toFixed(1)} KB`);
