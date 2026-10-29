@@ -157,6 +157,7 @@ class MieciuX50Card extends HTMLElement {
         const rooms = getRooms(c.vac, c.cam);
         this._neon = T ? renderNeonMap(pre, rooms, T) : null;
         this._neonMask = null;
+        this._neonLayers = null;
         if (this._neon) { this._neon.canvas.className = 'neon'; this._ui.areas = this._neon.areas; }
         const dims = { w: pre.naturalWidth, h: pre.naturalHeight, areas: this._neon?.areas, pxPerM: this._neon?.pxPerM };
         const changed = !this._mapDims || dims.w !== this._mapDims.w || dims.h !== this._mapDims.h;
@@ -168,6 +169,26 @@ class MieciuX50Card extends HTMLElement {
     }
     const useNeon = this._ui.holo && this._neon;
     this._mapImg.className = this._ui.holo && !this._neon ? 'holo' : '';
+    if (useNeon) {
+      // prawdziwa grubość 3D: przyciemnione kopie mapy w głąb (translateZ), bez ciężkich filtrów
+      if (!this._neonLayers) {
+        this._neonLayers = [1, 2, 3, 4, 5, 6].map((k) => {
+          const cv = document.createElement('canvas');
+          cv.width = this._neon.canvas.width; cv.height = this._neon.canvas.height;
+          const g = cv.getContext('2d');
+          g.drawImage(this._neon.canvas, 0, 0);
+          g.globalCompositeOperation = 'source-atop';
+          g.fillStyle = `rgba(31,${140 - k * 12},255,${0.35 + k * 0.08})`;
+          g.fillRect(0, 0, cv.width, cv.height);
+          cv.className = 'neon-layer';
+          const step = Math.max(2, (this._neon.pxPerM || 80) * 0.045);
+          cv.style.transform = `translateZ(${-k * step}px)`;
+          cv.style.opacity = String(0.7 - k * 0.08);
+          return cv;
+        });
+      }
+      this._neonLayers.slice().reverse().forEach((l) => slot.appendChild(l));
+    }
     slot.appendChild(useNeon ? this._neon.canvas : this._mapImg);
     if (useNeon) {
       // wiązka skanera tylko na kształcie mapy
@@ -338,6 +359,18 @@ class MieciuX50Card extends HTMLElement {
         case 'holo': this._ui.holo = !this._ui.holo; this._schedule(); break;
         case 'zoom': this._zoom(Number(el.dataset.dir) > 0 ? 1.25 : 0.8); break;
         case 'fit': this._view.z = null; this._applyView(); break;
+        case 'robot': {
+          // wyśrodkuj na robocie (pozycja z atrybutu kamery)
+          const view = this.shadowRoot.querySelector('.map-view');
+          const rob = this.shadowRoot.querySelector('.map-robot');
+          if (view && rob) {
+            const vr = view.getBoundingClientRect(), rr = rob.getBoundingClientRect();
+            this._view.x += vr.left + vr.width / 2 - (rr.left + rr.width / 2);
+            this._view.y += vr.top + vr.height / 2 - (rr.top + rr.height / 2);
+            this._applyView();
+          }
+          break;
+        }
         default: break;
       }
     });

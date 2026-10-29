@@ -744,12 +744,15 @@ const STYLES = `
   background-size: 28px 28px; }
 .panel {
   position: relative; min-width: 0; border-radius: 12px; padding: 12px;
-  background: linear-gradient(180deg, var(--mx-panel2), var(--mx-panel));
+  background:
+    linear-gradient(90deg, transparent 22px, rgba(130,225,255,.95) 22px, rgba(130,225,255,.95) 90px, transparent 90px) top / 100% 2px no-repeat,
+    linear-gradient(90deg, transparent calc(100% - 140px), rgba(80,190,255,.55) calc(100% - 140px), rgba(80,190,255,.55) calc(100% - 26px), transparent calc(100% - 26px)) bottom / 100% 2px no-repeat,
+    linear-gradient(180deg, var(--mx-panel2), var(--mx-panel));
   box-shadow: 0 0 0 1px rgba(80,190,255,.55), 0 0 12px rgba(31,140,255,.35), 0 0 26px rgba(31,125,255,.16) inset;
 }
-.panel::before, .panel::after { content:""; position:absolute; width:16px; height:16px; pointer-events:none; border-color: var(--mx-cyan); border-style: solid; opacity:.9; filter: drop-shadow(0 0 4px var(--mx-cyan)); }
-.panel::before { top:-1px; left:-1px; border-width: 2px 0 0 2px; border-top-left-radius: 12px; }
-.panel::after { bottom:-1px; right:-1px; border-width: 0 2px 2px 0; border-bottom-right-radius: 12px; }
+.panel::before, .panel::after { content:""; position:absolute; width:24px; height:24px; pointer-events:none; border-color: var(--mx-cyan); border-style: solid; opacity:.9; filter: drop-shadow(0 0 4px var(--mx-cyan)); }
+.panel::before { top:-1px; left:-1px; border-width: 2.5px 0 0 2.5px; border-top-left-radius: 12px; }
+.panel::after { bottom:-1px; right:-1px; border-width: 0 2.5px 2.5px 0; border-bottom-right-radius: 12px; }
 .ptitle { font-size: 15px; font-weight: 600; letter-spacing: .3px; margin: 0 0 10px; display:flex; align-items:center; justify-content:space-between; gap:8px; }
 h4 { margin: 0 0 6px; font-size: 14px; font-weight: 600; }
 .dim { color: var(--mx-dim); } .small { font-size: 12px; font-weight: 500; } .ok { color: var(--mx-ok); } .warn { color: var(--mx-warn); } .bad { color: var(--mx-bad); }
@@ -814,9 +817,11 @@ ha-icon { --mdc-icon-size: 20px; display: inline-flex; }
 .map-3d { transform-style: preserve-3d; position: relative; }
 .map-3d { transform-origin: 50% 50%; }
 
-.img-slot { position: relative; }
-.map-stage canvas.neon { display:block; filter: brightness(1.15) saturate(1.3) drop-shadow(0 0 2px rgba(160,235,255,.95)) drop-shadow(0 0 12px rgba(31,140,255,.75)) drop-shadow(0 0 30px rgba(31,125,255,.45)); }
-.map-3d.on canvas.neon { filter: brightness(1.15) saturate(1.3) drop-shadow(0 0 2px rgba(160,235,255,.95)) drop-shadow(0 5px 0 rgba(63,190,255,.6)) drop-shadow(0 10px 0 rgba(31,140,255,.45)) drop-shadow(0 15px 0 rgba(31,125,255,.3)) drop-shadow(0 20px 0 rgba(31,110,255,.18)) drop-shadow(0 0 26px rgba(31,125,255,.7)); }
+.img-slot { position: relative; transform-style: preserve-3d; }
+.map-stage canvas.neon { display:block; position: relative; filter: brightness(1.15) saturate(1.3) drop-shadow(0 0 2px rgba(160,235,255,.95)) drop-shadow(0 0 14px rgba(31,140,255,.7)); }
+.map-3d.on canvas.neon { filter: brightness(1.15) saturate(1.3) drop-shadow(0 0 2px rgba(160,235,255,.95)) drop-shadow(0 0 14px rgba(31,140,255,.7)); }
+.neon-layer { position:absolute; left:0; top:0; pointer-events:none; display:none; opacity: .55; }
+.map-3d.on .neon-layer { display:block; }
 .map-3d::before { content:""; position:absolute; inset: -12%; border-radius: 50%; pointer-events:none;
   background: radial-gradient(closest-side, rgba(31,140,255,.32), rgba(31,125,255,.10) 60%, transparent 75%),
               repeating-linear-gradient(0deg, rgba(63,216,255,.16) 0 2px, transparent 2px 46px), repeating-linear-gradient(90deg, rgba(63,216,255,.16) 0 2px, transparent 2px 46px);
@@ -1096,6 +1101,17 @@ ha-icon { --mdc-icon-size: 20px; display: inline-flex; }
 
 .rp-name { display:flex; align-items:center; gap: 8px; } .rp-mini { width: 58px; height: 38px; object-fit: contain; }
 .opts.row .opt:nth-child(2) { margin-right: 6px; }
+
+.furn { fill: rgba(220,240,255,.14); stroke: rgba(230,245,255,.85); stroke-width: 2.5; }
+.furn-ic { width: var(--s); height: var(--s); display:grid; place-items:center; color: rgba(235,248,255,.95); filter: drop-shadow(0 0 4px rgba(120,220,255,.9)); }
+.furn-ic ha-icon { --mdc-icon-size: var(--s); }
+.ring .rsub { fill: var(--mx-dim); font-size: 8px; font-weight: 500; }
+.top { border: 0; box-shadow: none; background: none; }
+.hud-frame { position:absolute; inset: 0; width: 100%; height: 100%; pointer-events:none; overflow: visible; }
+.hud-frame path { fill: none; stroke: rgba(90,200,255,.75); stroke-width: 1.5; vector-effect: non-scaling-stroke; filter: drop-shadow(0 0 4px rgba(63,216,255,.8)); }
+.hud-frame path.hi { stroke: rgba(150,235,255,1); stroke-width: 2.5; }
+.hud-frame path.fill { fill: rgba(8,22,48,.55); stroke: none; filter: none; }
+.top > *:not(.hud-frame) { position: relative; }
 `;
 
 // ===== src/views/views.js =====
@@ -1143,6 +1159,13 @@ function renderTop(c, visual) {
   const date = now.toLocaleDateString('pl-PL', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }).replace(/^./, (x) => x.toUpperCase()).replace('.,', ',');
   return `
   <header class="top">
+    <svg class="hud-frame" viewBox="0 0 1000 100" preserveAspectRatio="none" aria-hidden="true">
+      <path class="fill" d="M6 2 H800 L826 98 H6 Q2 98 2 94 V6 Q2 2 6 2 Z"/>
+      <path d="M6 2 H800 L826 98 H6 Q2 98 2 94 V6 Q2 2 6 2 Z"/>
+      <path class="hi" d="M2 30 V6 Q2 2 6 2 H60"/>
+      <path class="hi" d="M808 30 L826 98 H998"/>
+      <path d="M836 2 H998"/>
+    </svg>
     <div class="brand">${c.config.graphics === 'svg' ? heroRobotSvg(visual) : `<img class="hdr-robot" src="${esc(c.config.robot_image || ASSETS.robot_top)}" alt="">`}<div><h1>${esc(c.config.name || 'Mieciu')}</h1><small>${esc(c.config.model || 'Dreame X50 Ultra')}</small></div></div>
     <div class="tele">
       ${chip(batt === null ? 'mdi:battery-unknown' : chg === 'charging' ? 'mdi:battery-charging' : 'mdi:battery', batt === null ? '—' : `${batt}%`, battLab, 'c-batt')}
@@ -1168,8 +1191,8 @@ function renderErrorBanner(c) {
 }
 
 const TABS = [
-  ['map', 'mdi:map-legend', 'Mapa'], ['cleaning', 'mdi:spray-bottle', 'Sprzątanie'], ['station', 'mdi:dishwasher', 'Stacja'],
-  ['service', 'mdi:tools', 'Serwis'], ['history', 'mdi:clipboard-text-clock-outline', 'Historia'], ['settings', 'mdi:cog-outline', 'Ustawienia'],
+  ['map', 'mdi:map-legend', 'Mapa'], ['cleaning', 'mdi:hand-wash-outline', 'Sprzątanie'], ['station', 'mdi:dishwasher', 'Stacja'],
+  ['service', 'mdi:tools', 'Serwis'], ['history', 'mdi:clipboard-arrow-down-outline', 'Historia'], ['settings', 'mdi:cog-box', 'Ustawienia'],
 ];
 function renderNav(tab) {
   return `<nav class="nav panel">${TABS.map(([k, ic, lab]) =>
@@ -1191,7 +1214,13 @@ function renderMap(c, dims) {
       const x0 = toNum(f.x0), y0 = toNum(f.y0), fw = toNum(f.width), fh = toNum(f.height);
       if ([x0, y0, fw, fh].some((v) => v === null)) return '';
       const pts = [[x0, y0], [x0 + fw, y0], [x0 + fw, y0 + fh], [x0, y0 + fh]].map(([x, y]) => T(x, y).map((v) => v.toFixed(1)).join(',')).join(' ');
-      return `<polygon class="furn" points="${pts}"/>`;
+      const [cx, cy] = T(x0 + fw / 2, y0 + fh / 2);
+      const t = String(f.type || '').toLowerCase();
+      const ic = t.includes('podwójne') || t.includes('double') ? 'mdi:bed-king-outline' : t.includes('łóżko') || t.includes('bed') ? 'mdi:bed-single-outline'
+        : t.includes('sofa') || t.includes('kanap') ? 'mdi:sofa-outline' : t.includes('stół') || t.includes('table') ? 'mdi:table-furniture'
+        : t.includes('szafka') || t.includes('cabinet') ? 'mdi:dresser-outline' : 'mdi:sofa-single-outline';
+      const sz = Math.max(18, Math.min(fw, fh) * ppm / 1000 * 0.55);
+      return `<polygon class="furn" points="${pts}"/><foreignObject x="${cx - sz / 2}" y="${cy - sz / 2}" width="${sz}" height="${sz}"><div class="furn-ic" style="--s:${sz}px">${icon(ic)}</div></foreignObject>`;
     }).join('') : '';
     const rp = getRobotPosition(c.cam), cp = getChargerPosition(c.cam);
     const rs = Math.max(26, ppm * 0.62);
@@ -1214,11 +1243,11 @@ function renderMap(c, dims) {
   <section class="panel map-panel">
     <div class="map-tools">
       ${tool('holo', 'mdi:layers-outline', 'Warstwa holograficzna', ui.holo)}
-      ${tool('fit', 'mdi:crosshairs-gps', 'Wyśrodkuj')}
-      ${tool('zoom', 'mdi:magnify-plus-outline', 'Przybliż', false, 'data-dir="1"')}
-      ${tool('zoom', 'mdi:magnify-minus-outline', 'Oddal', false, 'data-dir="-1"')}
-      ${tool('labels', 'mdi:label-outline', 'Etykiety pokoi', ui.labels)}
-      ${tool('all-rooms', 'mdi:select-all', 'Zaznacz wszystkie')}
+      ${tool('fit', 'mdi:radiobox-marked', 'Dopasuj widok')}
+      ${tool('all-rooms', 'mdi:crop-free', 'Zaznacz wszystkie pokoje')}
+      ${tool('robot', 'mdi:map-marker-outline', 'Pokaż robota')}
+      ${tool('labels', 'mdi:ruler', 'Etykiety i metraż', ui.labels)}
+      ${tool('clear-rooms', 'mdi:vector-arrange-below', 'Wyczyść zaznaczenie')}
       <div class="dim2d3d"><button class="${!ui.map3d ? 'on' : ''}" data-act="map2d">2D</button><i></i><button class="${ui.map3d ? 'on' : ''}" data-act="map3d">3D</button></div>
     </div>
     <div class="map-col">
@@ -1345,9 +1374,9 @@ function renderRobot(c, visual) {
 }
 
 const OPT_ICONS = {
-  sweeping: 'mdi:robot-vacuum', sweeping_and_mopping: 'mdi:robot-vacuum-variant', mopping: 'mdi:water-outline', mopping_after_sweeping: 'mdi:autorenew',
-  quiet: 'mdi:fan-speed-1', silent: 'mdi:fan-speed-1', standard: 'mdi:fan-speed-2', strong: 'mdi:fan-speed-3', turbo: 'mdi:fan-plus',
-  slightly_dry: 'mdi:water-minus-outline', moist: 'mdi:water-outline', wet: 'mdi:water',
+  sweeping: 'mdi:robot-vacuum', sweeping_and_mopping: 'mdi:robot-vacuum-variant', mopping: 'mdi:water-outline', mopping_after_sweeping: 'mdi:robot-vacuum-alert',
+  quiet: 'mdi:fan', silent: 'mdi:fan', standard: 'mdi:fan', strong: 'mdi:fan', turbo: 'mdi:fan',
+  slightly_dry: 'mdi:weather-windy', moist: 'mdi:water-outline', wet: 'mdi:water-opacity',
 };
 function optTiles(c, key, cls = '') {
   const so = c.st(key);
@@ -1409,7 +1438,16 @@ function renderRooms(c, canClean) {
 const ADV = {
   general: { label: 'Ogólne', selects: ['cleaning_route', 'auto_recleaning', 'auto_rewashing', 'mop_extend_frequency'], switches: ['resume_cleaning', 'customized_cleaning', 'mop_extend', 'side_reach', 'gap_cleaning_extension', 'mopping_under_furnitures'] },
   carpets: { label: 'Dywany', selects: ['carpet_cleaning'], switches: ['carpet_boost', 'clean_carpets_first', 'intensive_carpet_cleaning', 'side_brush_carpet_rotate', 'large_particles_boost'] },
-  cleangenius: { label: 'CleanGenius', genius: true, selects: ['water_temperature', 'washing_mode', 'self_clean_frequency'], switches: ['carpet_boost', 'clean_carpets_first', 'smart_mop_washing', 'mop_extend', 'mopping_under_furnitures'] },
+  cleangenius: { label: 'CleanGenius', genius: true,
+    selects: [['water_temperature', 'Temperatura wody'], ['washing_mode', 'Tryb mycia mopów'], ['self_clean_frequency', 'Samoczyszczenie']],
+    switches: [
+      { sel: 'carpet_cleaning', label: 'Adaptacja do dywanów', on: (v) => v === 'adaptation', onOpt: 'adaptation', offOpt: 'ignore' },
+      ['clean_carpets_first', 'Najpierw dywany'],
+      { sel: 'auto_recleaning', label: 'Ponowne sprzątanie', on: (v) => v !== 'off', onOpt: 'in_deep_mode', offOpt: 'off' },
+      { sel: 'auto_rewashing', label: 'Ponowne mycie', on: (v) => v !== 'off', onOpt: 'in_deep_mode', offOpt: 'off' },
+      ['mop_extend', 'Rozszerzanie mopa'],
+      ['mopping_under_furnitures', 'Czyszczenie pod meblami'],
+    ] },
   ai: { label: 'AI i przeszkody', selects: ['auto_lds_coverage'], switches: ['ai_obstacle_detection', 'ai_furniture_detection', 'ai_pet_detection', 'ai_fluid_detection', 'obstacle_avoidance', 'collision_avoidance', 'fuzzy_obstacle_detection'] },
   station: { label: 'Stacja', selects: ['drying_time', 'auto_empty_mode', 'washing_mode', 'self_clean_frequency'], switches: ['self_clean', 'auto_drying', 'smart_mop_washing', 'mop_washing_with_detergent', 'mopping_with_detergent', 'silent_drying', 'auto_water_refilling'] },
 };
@@ -1429,9 +1467,18 @@ function selectRow(c, so, label) {
     ${opts(so).map((o) => `<option value="${esc(o)}" ${o === so.state ? 'selected' : ''}>${esc(optLabel(o))}</option>`).join('')}</select></div>`;
 }
 
-function switchRow(so) {
+function switchRow(so, label) {
   if (!so || isUnavail(so)) return '';
-  return `<button class="sw" data-act="toggle" data-entity="${esc(so.entity_id)}"><span>${esc(shortName(so))}</span><i class="tg ${so.state === 'on' ? 'on' : ''}"></i></button>`;
+  return `<button class="sw" data-act="toggle" data-entity="${esc(so.entity_id)}"><span>${esc(label || shortName(so))}</span><i class="tg ${so.state === 'on' ? 'on' : ''}"></i></button>`;
+}
+
+// przełącznik oparty o encję select (np. dywany: adaptacja <-> ignoruj)
+function selToggleRow(so, def) {
+  if (!so || isUnavail(so)) return '';
+  const on = def.on(so.state);
+  const target = on ? def.offOpt : def.onOpt;
+  if (!opts(so).includes(target)) return '';
+  return `<button class="sw" data-act="select" data-entity="${esc(so.entity_id)}" data-option="${esc(target)}"><span>${esc(def.label)}</span><i class="tg ${on ? 'on' : ''}"></i></button>`;
 }
 
 function renderAdvanced(c, forceTab) {
@@ -1448,8 +1495,9 @@ function renderAdvanced(c, forceTab) {
       ${cgm && !isUnavail(cgm) ? `<div class="g-note">CleanGenius: ${esc(optLabel(cgm.state))}</div>` : ''}
     </div>`;
   }
-  left += def.selects.map((k) => selectRow(c, c.ent('select', k))).join('');
-  const right = def.switches.map((k) => switchRow(c.ent('switch', k))).join('');
+  left += def.selects.map((k) => (Array.isArray(k) ? selectRow(c, c.ent('select', k[0]), k[1]) : selectRow(c, c.ent('select', k)))).join('');
+  const right = def.switches.map((k) => (Array.isArray(k) ? switchRow(c.ent('switch', k[0]), k[1])
+    : typeof k === 'object' ? selToggleRow(c.ent('select', k.sel), k) : switchRow(c.ent('switch', k)))).join('');
   return `
   <section class="panel adv-panel">
     <h3 class="ptitle">Ustawienia zaawansowane</h3>
@@ -1459,13 +1507,13 @@ function renderAdvanced(c, forceTab) {
 }
 
 // ---------- serwis ----------
-function ring(v) {
+function ring(v, sub = '') {
   const n = toNum(v);
   const r = 26, C = 2 * Math.PI * r;
   const col = n === null ? 'var(--mx-dim)' : n > 50 ? 'var(--mx-ok)' : n > 20 ? 'var(--mx-warn)' : 'var(--mx-bad)';
   return `<svg class="ring" viewBox="0 0 64 64"><circle class="bg" cx="32" cy="32" r="${r}" fill="none" stroke-width="5"/>
     <circle class="fg" cx="32" cy="32" r="${r}" fill="none" stroke-width="5" stroke="${col}" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - (n ?? 0) / 100)}" transform="rotate(-90 32 32)" style="filter:drop-shadow(0 0 4px ${col})"/>
-    <text x="32" y="36" text-anchor="middle">${n === null ? '—' : `${n}%`}</text></svg>`;
+    <text x="32" y="${sub ? 33 : 36}" text-anchor="middle">${n === null ? '—' : `${n}%`}</text>${sub ? `<text class="rsub" x="32" y="44" text-anchor="middle">${esc(sub)}</text>` : ''}</svg>`;
 }
 
 const SVC_DASH = ['main_brush', 'side_brush', 'filter', 'sensor_dirty', 'silver_ion', 'scale_inhibitor'];
@@ -1476,8 +1524,9 @@ function renderService(c, full = false) {
   const items = keys.filter((k) => c.st(`svc_${k}_left`)).map((k) => {
     const left = c.st(`svc_${k}_left`), time = c.st(`svc_${k}_time`), rst = c.st(`svc_${k}_reset`);
     const unit = time?.attributes?.unit_of_measurement || '';
-    return `<div class="svc-item">${ring(isUnavail(left) ? null : left.state)}<b>${esc(SVC_LABEL[k])}</b>
-      <small>${time && !isUnavail(time) ? `${fmtNum(toNum(time.state))} ${esc(unit)}` : '—'}</small>
+    const tl = time && !isUnavail(time) ? `${fmtNum(toNum(time.state))} ${unit}` : '—';
+    return `<div class="svc-item">${ring(isUnavail(left) ? null : left.state, tl)}<b>${esc(SVC_LABEL[k])}</b>
+      <small>${esc(tl)}</small>
       ${full && rst && rst.state !== 'unavailable' ? `<button class="rst" data-act="press" data-entity="${esc(rst.entity_id)}" data-label="Reset: ${esc(SVC_LABEL[k])}">Resetuj</button>` : ''}</div>`;
   }).join('');
   const items2 = maint?.state === 'on' ? pyParse(maint.attributes?.items) : null;
@@ -1718,6 +1767,7 @@ class MieciuX50Card extends HTMLElement {
         const rooms = getRooms(c.vac, c.cam);
         this._neon = T ? renderNeonMap(pre, rooms, T) : null;
         this._neonMask = null;
+        this._neonLayers = null;
         if (this._neon) { this._neon.canvas.className = 'neon'; this._ui.areas = this._neon.areas; }
         const dims = { w: pre.naturalWidth, h: pre.naturalHeight, areas: this._neon?.areas, pxPerM: this._neon?.pxPerM };
         const changed = !this._mapDims || dims.w !== this._mapDims.w || dims.h !== this._mapDims.h;
@@ -1729,6 +1779,26 @@ class MieciuX50Card extends HTMLElement {
     }
     const useNeon = this._ui.holo && this._neon;
     this._mapImg.className = this._ui.holo && !this._neon ? 'holo' : '';
+    if (useNeon) {
+      // prawdziwa grubość 3D: przyciemnione kopie mapy w głąb (translateZ), bez ciężkich filtrów
+      if (!this._neonLayers) {
+        this._neonLayers = [1, 2, 3, 4, 5, 6].map((k) => {
+          const cv = document.createElement('canvas');
+          cv.width = this._neon.canvas.width; cv.height = this._neon.canvas.height;
+          const g = cv.getContext('2d');
+          g.drawImage(this._neon.canvas, 0, 0);
+          g.globalCompositeOperation = 'source-atop';
+          g.fillStyle = `rgba(31,${140 - k * 12},255,${0.35 + k * 0.08})`;
+          g.fillRect(0, 0, cv.width, cv.height);
+          cv.className = 'neon-layer';
+          const step = Math.max(2, (this._neon.pxPerM || 80) * 0.045);
+          cv.style.transform = `translateZ(${-k * step}px)`;
+          cv.style.opacity = String(0.7 - k * 0.08);
+          return cv;
+        });
+      }
+      this._neonLayers.slice().reverse().forEach((l) => slot.appendChild(l));
+    }
     slot.appendChild(useNeon ? this._neon.canvas : this._mapImg);
     if (useNeon) {
       // wiązka skanera tylko na kształcie mapy
@@ -1899,6 +1969,18 @@ class MieciuX50Card extends HTMLElement {
         case 'holo': this._ui.holo = !this._ui.holo; this._schedule(); break;
         case 'zoom': this._zoom(Number(el.dataset.dir) > 0 ? 1.25 : 0.8); break;
         case 'fit': this._view.z = null; this._applyView(); break;
+        case 'robot': {
+          // wyśrodkuj na robocie (pozycja z atrybutu kamery)
+          const view = this.shadowRoot.querySelector('.map-view');
+          const rob = this.shadowRoot.querySelector('.map-robot');
+          if (view && rob) {
+            const vr = view.getBoundingClientRect(), rr = rob.getBoundingClientRect();
+            this._view.x += vr.left + vr.width / 2 - (rr.left + rr.width / 2);
+            this._view.y += vr.top + vr.height / 2 - (rr.top + rr.height / 2);
+            this._applyView();
+          }
+          break;
+        }
         default: break;
       }
     });

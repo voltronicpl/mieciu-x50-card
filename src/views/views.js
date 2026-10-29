@@ -43,6 +43,13 @@ export function renderTop(c, visual) {
   const date = now.toLocaleDateString('pl-PL', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }).replace(/^./, (x) => x.toUpperCase()).replace('.,', ',');
   return `
   <header class="top">
+    <svg class="hud-frame" viewBox="0 0 1000 100" preserveAspectRatio="none" aria-hidden="true">
+      <path class="fill" d="M6 2 H800 L826 98 H6 Q2 98 2 94 V6 Q2 2 6 2 Z"/>
+      <path d="M6 2 H800 L826 98 H6 Q2 98 2 94 V6 Q2 2 6 2 Z"/>
+      <path class="hi" d="M2 30 V6 Q2 2 6 2 H60"/>
+      <path class="hi" d="M808 30 L826 98 H998"/>
+      <path d="M836 2 H998"/>
+    </svg>
     <div class="brand">${c.config.graphics === 'svg' ? heroRobotSvg(visual) : `<img class="hdr-robot" src="${esc(c.config.robot_image || ASSETS.robot_top)}" alt="">`}<div><h1>${esc(c.config.name || 'Mieciu')}</h1><small>${esc(c.config.model || 'Dreame X50 Ultra')}</small></div></div>
     <div class="tele">
       ${chip(batt === null ? 'mdi:battery-unknown' : chg === 'charging' ? 'mdi:battery-charging' : 'mdi:battery', batt === null ? '—' : `${batt}%`, battLab, 'c-batt')}
@@ -68,8 +75,8 @@ export function renderErrorBanner(c) {
 }
 
 const TABS = [
-  ['map', 'mdi:map-legend', 'Mapa'], ['cleaning', 'mdi:spray-bottle', 'Sprzątanie'], ['station', 'mdi:dishwasher', 'Stacja'],
-  ['service', 'mdi:tools', 'Serwis'], ['history', 'mdi:clipboard-text-clock-outline', 'Historia'], ['settings', 'mdi:cog-outline', 'Ustawienia'],
+  ['map', 'mdi:map-legend', 'Mapa'], ['cleaning', 'mdi:hand-wash-outline', 'Sprzątanie'], ['station', 'mdi:dishwasher', 'Stacja'],
+  ['service', 'mdi:tools', 'Serwis'], ['history', 'mdi:clipboard-arrow-down-outline', 'Historia'], ['settings', 'mdi:cog-box', 'Ustawienia'],
 ];
 export function renderNav(tab) {
   return `<nav class="nav panel">${TABS.map(([k, ic, lab]) =>
@@ -91,7 +98,13 @@ export function renderMap(c, dims) {
       const x0 = toNum(f.x0), y0 = toNum(f.y0), fw = toNum(f.width), fh = toNum(f.height);
       if ([x0, y0, fw, fh].some((v) => v === null)) return '';
       const pts = [[x0, y0], [x0 + fw, y0], [x0 + fw, y0 + fh], [x0, y0 + fh]].map(([x, y]) => T(x, y).map((v) => v.toFixed(1)).join(',')).join(' ');
-      return `<polygon class="furn" points="${pts}"/>`;
+      const [cx, cy] = T(x0 + fw / 2, y0 + fh / 2);
+      const t = String(f.type || '').toLowerCase();
+      const ic = t.includes('podwójne') || t.includes('double') ? 'mdi:bed-king-outline' : t.includes('łóżko') || t.includes('bed') ? 'mdi:bed-single-outline'
+        : t.includes('sofa') || t.includes('kanap') ? 'mdi:sofa-outline' : t.includes('stół') || t.includes('table') ? 'mdi:table-furniture'
+        : t.includes('szafka') || t.includes('cabinet') ? 'mdi:dresser-outline' : 'mdi:sofa-single-outline';
+      const sz = Math.max(18, Math.min(fw, fh) * ppm / 1000 * 0.55);
+      return `<polygon class="furn" points="${pts}"/><foreignObject x="${cx - sz / 2}" y="${cy - sz / 2}" width="${sz}" height="${sz}"><div class="furn-ic" style="--s:${sz}px">${icon(ic)}</div></foreignObject>`;
     }).join('') : '';
     const rp = getRobotPosition(c.cam), cp = getChargerPosition(c.cam);
     const rs = Math.max(26, ppm * 0.62);
@@ -114,11 +127,11 @@ export function renderMap(c, dims) {
   <section class="panel map-panel">
     <div class="map-tools">
       ${tool('holo', 'mdi:layers-outline', 'Warstwa holograficzna', ui.holo)}
-      ${tool('fit', 'mdi:crosshairs-gps', 'Wyśrodkuj')}
-      ${tool('zoom', 'mdi:magnify-plus-outline', 'Przybliż', false, 'data-dir="1"')}
-      ${tool('zoom', 'mdi:magnify-minus-outline', 'Oddal', false, 'data-dir="-1"')}
-      ${tool('labels', 'mdi:label-outline', 'Etykiety pokoi', ui.labels)}
-      ${tool('all-rooms', 'mdi:select-all', 'Zaznacz wszystkie')}
+      ${tool('fit', 'mdi:radiobox-marked', 'Dopasuj widok')}
+      ${tool('all-rooms', 'mdi:crop-free', 'Zaznacz wszystkie pokoje')}
+      ${tool('robot', 'mdi:map-marker-outline', 'Pokaż robota')}
+      ${tool('labels', 'mdi:ruler', 'Etykiety i metraż', ui.labels)}
+      ${tool('clear-rooms', 'mdi:vector-arrange-below', 'Wyczyść zaznaczenie')}
       <div class="dim2d3d"><button class="${!ui.map3d ? 'on' : ''}" data-act="map2d">2D</button><i></i><button class="${ui.map3d ? 'on' : ''}" data-act="map3d">3D</button></div>
     </div>
     <div class="map-col">
@@ -245,9 +258,9 @@ export function renderRobot(c, visual) {
 }
 
 const OPT_ICONS = {
-  sweeping: 'mdi:robot-vacuum', sweeping_and_mopping: 'mdi:robot-vacuum-variant', mopping: 'mdi:water-outline', mopping_after_sweeping: 'mdi:autorenew',
-  quiet: 'mdi:fan-speed-1', silent: 'mdi:fan-speed-1', standard: 'mdi:fan-speed-2', strong: 'mdi:fan-speed-3', turbo: 'mdi:fan-plus',
-  slightly_dry: 'mdi:water-minus-outline', moist: 'mdi:water-outline', wet: 'mdi:water',
+  sweeping: 'mdi:robot-vacuum', sweeping_and_mopping: 'mdi:robot-vacuum-variant', mopping: 'mdi:water-outline', mopping_after_sweeping: 'mdi:robot-vacuum-alert',
+  quiet: 'mdi:fan', silent: 'mdi:fan', standard: 'mdi:fan', strong: 'mdi:fan', turbo: 'mdi:fan',
+  slightly_dry: 'mdi:weather-windy', moist: 'mdi:water-outline', wet: 'mdi:water-opacity',
 };
 function optTiles(c, key, cls = '') {
   const so = c.st(key);
@@ -309,7 +322,16 @@ export function renderRooms(c, canClean) {
 const ADV = {
   general: { label: 'Ogólne', selects: ['cleaning_route', 'auto_recleaning', 'auto_rewashing', 'mop_extend_frequency'], switches: ['resume_cleaning', 'customized_cleaning', 'mop_extend', 'side_reach', 'gap_cleaning_extension', 'mopping_under_furnitures'] },
   carpets: { label: 'Dywany', selects: ['carpet_cleaning'], switches: ['carpet_boost', 'clean_carpets_first', 'intensive_carpet_cleaning', 'side_brush_carpet_rotate', 'large_particles_boost'] },
-  cleangenius: { label: 'CleanGenius', genius: true, selects: ['water_temperature', 'washing_mode', 'self_clean_frequency'], switches: ['carpet_boost', 'clean_carpets_first', 'smart_mop_washing', 'mop_extend', 'mopping_under_furnitures'] },
+  cleangenius: { label: 'CleanGenius', genius: true,
+    selects: [['water_temperature', 'Temperatura wody'], ['washing_mode', 'Tryb mycia mopów'], ['self_clean_frequency', 'Samoczyszczenie']],
+    switches: [
+      { sel: 'carpet_cleaning', label: 'Adaptacja do dywanów', on: (v) => v === 'adaptation', onOpt: 'adaptation', offOpt: 'ignore' },
+      ['clean_carpets_first', 'Najpierw dywany'],
+      { sel: 'auto_recleaning', label: 'Ponowne sprzątanie', on: (v) => v !== 'off', onOpt: 'in_deep_mode', offOpt: 'off' },
+      { sel: 'auto_rewashing', label: 'Ponowne mycie', on: (v) => v !== 'off', onOpt: 'in_deep_mode', offOpt: 'off' },
+      ['mop_extend', 'Rozszerzanie mopa'],
+      ['mopping_under_furnitures', 'Czyszczenie pod meblami'],
+    ] },
   ai: { label: 'AI i przeszkody', selects: ['auto_lds_coverage'], switches: ['ai_obstacle_detection', 'ai_furniture_detection', 'ai_pet_detection', 'ai_fluid_detection', 'obstacle_avoidance', 'collision_avoidance', 'fuzzy_obstacle_detection'] },
   station: { label: 'Stacja', selects: ['drying_time', 'auto_empty_mode', 'washing_mode', 'self_clean_frequency'], switches: ['self_clean', 'auto_drying', 'smart_mop_washing', 'mop_washing_with_detergent', 'mopping_with_detergent', 'silent_drying', 'auto_water_refilling'] },
 };
@@ -329,9 +351,18 @@ function selectRow(c, so, label) {
     ${opts(so).map((o) => `<option value="${esc(o)}" ${o === so.state ? 'selected' : ''}>${esc(optLabel(o))}</option>`).join('')}</select></div>`;
 }
 
-function switchRow(so) {
+function switchRow(so, label) {
   if (!so || isUnavail(so)) return '';
-  return `<button class="sw" data-act="toggle" data-entity="${esc(so.entity_id)}"><span>${esc(shortName(so))}</span><i class="tg ${so.state === 'on' ? 'on' : ''}"></i></button>`;
+  return `<button class="sw" data-act="toggle" data-entity="${esc(so.entity_id)}"><span>${esc(label || shortName(so))}</span><i class="tg ${so.state === 'on' ? 'on' : ''}"></i></button>`;
+}
+
+// przełącznik oparty o encję select (np. dywany: adaptacja <-> ignoruj)
+function selToggleRow(so, def) {
+  if (!so || isUnavail(so)) return '';
+  const on = def.on(so.state);
+  const target = on ? def.offOpt : def.onOpt;
+  if (!opts(so).includes(target)) return '';
+  return `<button class="sw" data-act="select" data-entity="${esc(so.entity_id)}" data-option="${esc(target)}"><span>${esc(def.label)}</span><i class="tg ${on ? 'on' : ''}"></i></button>`;
 }
 
 export function renderAdvanced(c, forceTab) {
@@ -348,8 +379,9 @@ export function renderAdvanced(c, forceTab) {
       ${cgm && !isUnavail(cgm) ? `<div class="g-note">CleanGenius: ${esc(optLabel(cgm.state))}</div>` : ''}
     </div>`;
   }
-  left += def.selects.map((k) => selectRow(c, c.ent('select', k))).join('');
-  const right = def.switches.map((k) => switchRow(c.ent('switch', k))).join('');
+  left += def.selects.map((k) => (Array.isArray(k) ? selectRow(c, c.ent('select', k[0]), k[1]) : selectRow(c, c.ent('select', k)))).join('');
+  const right = def.switches.map((k) => (Array.isArray(k) ? switchRow(c.ent('switch', k[0]), k[1])
+    : typeof k === 'object' ? selToggleRow(c.ent('select', k.sel), k) : switchRow(c.ent('switch', k)))).join('');
   return `
   <section class="panel adv-panel">
     <h3 class="ptitle">Ustawienia zaawansowane</h3>
@@ -359,13 +391,13 @@ export function renderAdvanced(c, forceTab) {
 }
 
 // ---------- serwis ----------
-function ring(v) {
+function ring(v, sub = '') {
   const n = toNum(v);
   const r = 26, C = 2 * Math.PI * r;
   const col = n === null ? 'var(--mx-dim)' : n > 50 ? 'var(--mx-ok)' : n > 20 ? 'var(--mx-warn)' : 'var(--mx-bad)';
   return `<svg class="ring" viewBox="0 0 64 64"><circle class="bg" cx="32" cy="32" r="${r}" fill="none" stroke-width="5"/>
     <circle class="fg" cx="32" cy="32" r="${r}" fill="none" stroke-width="5" stroke="${col}" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - (n ?? 0) / 100)}" transform="rotate(-90 32 32)" style="filter:drop-shadow(0 0 4px ${col})"/>
-    <text x="32" y="36" text-anchor="middle">${n === null ? '—' : `${n}%`}</text></svg>`;
+    <text x="32" y="${sub ? 33 : 36}" text-anchor="middle">${n === null ? '—' : `${n}%`}</text>${sub ? `<text class="rsub" x="32" y="44" text-anchor="middle">${esc(sub)}</text>` : ''}</svg>`;
 }
 
 const SVC_DASH = ['main_brush', 'side_brush', 'filter', 'sensor_dirty', 'silver_ion', 'scale_inhibitor'];
@@ -376,8 +408,9 @@ export function renderService(c, full = false) {
   const items = keys.filter((k) => c.st(`svc_${k}_left`)).map((k) => {
     const left = c.st(`svc_${k}_left`), time = c.st(`svc_${k}_time`), rst = c.st(`svc_${k}_reset`);
     const unit = time?.attributes?.unit_of_measurement || '';
-    return `<div class="svc-item">${ring(isUnavail(left) ? null : left.state)}<b>${esc(SVC_LABEL[k])}</b>
-      <small>${time && !isUnavail(time) ? `${fmtNum(toNum(time.state))} ${esc(unit)}` : '—'}</small>
+    const tl = time && !isUnavail(time) ? `${fmtNum(toNum(time.state))} ${unit}` : '—';
+    return `<div class="svc-item">${ring(isUnavail(left) ? null : left.state, tl)}<b>${esc(SVC_LABEL[k])}</b>
+      <small>${esc(tl)}</small>
       ${full && rst && rst.state !== 'unavailable' ? `<button class="rst" data-act="press" data-entity="${esc(rst.entity_id)}" data-label="Reset: ${esc(SVC_LABEL[k])}">Resetuj</button>` : ''}</div>`;
   }).join('');
   const items2 = maint?.state === 'on' ? pyParse(maint.attributes?.items) : null;
