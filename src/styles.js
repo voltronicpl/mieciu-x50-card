@@ -33,7 +33,7 @@ h4 { margin: 0 0 6px; font-size: 14px; font-weight: 600; }
 .dim { color: var(--mx-dim); } .small { font-size: 12px; font-weight: 500; } .ok { color: var(--mx-ok); } .warn { color: var(--mx-warn); } .bad { color: var(--mx-bad); }
 button { font: inherit; color: inherit; cursor: pointer; border: 0; background: none; padding: 0; }
 button:disabled { opacity: .38; cursor: not-allowed; }
-ha-icon { --mdc-icon-size: 20px; display: inline-flex; }
+ha-icon { --mdc-icon-size: 20px; display: inline-flex; width: var(--mdc-icon-size); height: var(--mdc-icon-size); flex: 0 0 auto; }
 .link { color: var(--mx-cyan); font-size: 12.5px; }
 
 /* ===== nagłówek ===== */
@@ -115,9 +115,9 @@ ha-icon { --mdc-icon-size: 20px; display: inline-flex; }
 .map-charger { fill: rgba(56,229,155,.35); stroke: var(--mx-ok); stroke-width: 3; }
 .anc { fill: transparent; }
 .map-labels { position:absolute; inset:0; pointer-events:none; }
-.mlabel { position:absolute; visibility:hidden; transform: translate(-50%,-50%); pointer-events:auto; display:flex; flex-direction:column; align-items:center; gap:0; padding: 3px 6px; border-radius: 8px; text-shadow: 0 0 4px rgba(0,0,0,.95), 0 0 10px rgba(0,0,0,.8); }
-.mlabel ha-icon { --mdc-icon-size: 22px; color: #fff; filter: drop-shadow(0 0 4px var(--rc)); }
-.mlabel b { font-size: 13px; font-weight: 600; white-space: nowrap; } .mlabel span { font-size: 12px; color: #dbe9fb; }
+.mlabel { position:absolute; visibility:hidden; transform: translate(-50%,-50%); pointer-events:auto; display:flex; flex-direction:column; align-items:center; gap:0; padding: 2px 7px 3px; border-radius: 8px; background: rgba(3,10,24,.5); box-shadow: 0 0 0 1px color-mix(in srgb, var(--rc) 60%, transparent), 0 0 10px color-mix(in srgb, var(--rc) 35%, transparent); text-shadow: 0 0 4px rgba(0,0,0,.95); }
+.mlabel ha-icon { --mdc-icon-size: 17px; color: #fff; filter: drop-shadow(0 0 4px var(--rc)); }
+.mlabel b { font-size: 12.5px; font-weight: 700; white-space: nowrap; color: #fff; } .mlabel span { font-size: 11px; font-weight: 600; color: #e8f3ff; }
 .mlabel.sel { background: var(--rc); box-shadow: 0 0 14px var(--rc); color: #04101f; text-shadow: none; } .mlabel.sel span { color: #04101f; } .mlabel.sel ha-icon { color: #04101f; }
 .mlabel.cur { box-shadow: 0 0 0 1px var(--mx-ok); }
 .map-stage img { display:block; max-width:none; user-select:none; -webkit-user-drag:none; }
@@ -387,4 +387,16 @@ ha-icon { --mdc-icon-size: 20px; display: inline-flex; }
 .hud-frame path.hi { stroke: rgba(150,235,255,1); stroke-width: 2.5; }
 .hud-frame path.fill { fill: rgba(8,22,48,.55); stroke: none; filter: none; }
 .top > *:not(.hud-frame) { position: relative; }
+
+.mbill { position:absolute; visibility:hidden; width: var(--s, 60px); transform: translate(-50%, -78%); pointer-events:none; z-index: 2; }
+.mbill img, .mbill svg { width: 100%; height: auto; display:block; position: relative; filter: drop-shadow(0 6px 8px rgba(0,0,0,.6)) drop-shadow(0 0 10px rgba(63,216,255,.45)); }
+.mbill.robot img { -webkit-mask-image: radial-gradient(ellipse 50% 50%, #000 78%, transparent 100%); mask-image: radial-gradient(ellipse 50% 50%, #000 78%, transparent 100%); }
+.mbill.charger { width: calc(var(--s, 60px) * 0.9); transform: translate(-50%, -88%); }
+.mbill.charger img { -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 8%, #000 92%, transparent 100%); mask-image: linear-gradient(90deg, transparent 0, #000 8%, #000 92%, transparent 100%); }
+.mb-glow { position:absolute; left: 50%; bottom: 2%; width: 120%; height: 36%; transform: translateX(-50%); border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(63,216,255,.75), rgba(31,125,255,.25) 60%, transparent); }
+.mbill.robot .mb-glow { animation: mx-pulse 2s ease-in-out infinite; }
+
+.big.primary { background: linear-gradient(180deg, rgba(14,32,66,.9), rgba(6,16,36,.9)); box-shadow: 0 0 0 1px var(--mx-line), 0 0 16px rgba(31,125,255,.15) inset; }
+.big.primary.lit { background: linear-gradient(180deg, #2a8bff, #0b52d0); box-shadow: 0 0 0 1px var(--mx-line-strong), 0 0 28px rgba(31,125,255,.7); }
 `;

@@ -383,6 +383,7 @@ function getRooms(vacState, mapState) {
         id: Number(r.room_id), name: r.name, icon: r.icon, order: toNum(r.order),
         x: toNum(r.x), y: toNum(r.y), floor: r.floor_material, visible: r.visibility !== 'Hidden',
         color: toNum(r.color_index),
+        x0: toNum(r.x0), y0: toNum(r.y0), x1: toNum(r.x1), y1: toNum(r.y1),
       });
     }
   }
@@ -435,45 +436,63 @@ function renderNeonMap(img, rooms, T) {
   const near = (a, b, tol) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]) <= tol;
   const bg = px(0);
 
-  const seeds = [];
-  rooms.forEach((r, idx) => {
-    if (r.x === null || r.y === null) return;
-    let [sx, sy] = T(r.x, r.y);
-    sx = Math.round(sx); sy = Math.round(sy);
-    if (sx < 0 || sy < 0 || sx >= w || sy >= h) return;
-    seeds.push({ idx, i: sy * w + sx });
+  // 1) co jest tłem, a co zmapowanym obszarem (podłoga, ściany, napisy, trasa…)
+  const isContent = (k) => { const c = px(k); return c[3] >= 20 && !near(c, bg, 14); };
+
+  // 2) prostokąty pokoi z integracji (mm) -> piksele obrazu
+  const boxes = rooms.map((r) => {
+    if ([r.x0, r.y0, r.x1, r.y1].some((v) => v === null || v === undefined)) return null;
+    const pts = [T(r.x0, r.y0), T(r.x1, r.y0), T(r.x0, r.y1), T(r.x1, r.y1)];
+    const xs = pts.map((q) => q[0]), ys = pts.map((q) => q[1]);
+    const [cx, cy] = r.x !== null && r.y !== null ? T(r.x, r.y) : [(Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2];
+    return { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys), cx, cy };
   });
 
-  // flood fill każdego pokoju
-  const stack = new Int32Array(N);
-  for (const { idx, i } of seeds) {
-    if (owner[i] !== -1) continue;
-    const col = px(i);
-    if (col[3] < 20 || near(col, bg, 12)) continue;
-    let sp = 0; stack[sp++] = i; owner[i] = idx;
-    while (sp) {
-      const k = stack[--sp];
-      const x = k % w, y = (k - x) / w;
-      const nb = [x > 0 ? k - 1 : -1, x < w - 1 ? k + 1 : -1, y > 0 ? k - w : -1, y < h - 1 ? k + w : -1];
-      for (const n of nb) {
-        if (n < 0 || owner[n] !== -1) continue;
-        const c = px(n);
-        if (c[3] > 20 && near(c, col, 36)) { owner[n] = idx; stack[sp++] = n; }
+  // 3) przypisanie „rozrostem”: start z pikseli należących tylko do jednego prostokąta,
+  //    potem BFS przez zmapowany obszar (ciemne ściany blokują), ograniczony do
+  //    własnego prostokąta (+ mały margines). Sporne strefy dzieli odległość po podłodze.
+  //    Kolory i napisy integracji są ignorowane — liczy się tylko geometria.
+  const [ax0, ay0] = T(0, 0), [ax1, ay1] = T(1000, 0);
+  const ppm = Math.hypot(ax1 - ax0, ay1 - ay0) || 80;
+  const mg = ppm * 0.12;
+  const inBox = (b, x, y) => b && x >= b.x0 - mg && x <= b.x1 + mg && y >= b.y0 - mg && y <= b.y1 + mg;
+  const isWall = (k) => { const c = px(k); return (c[0] + c[1] + c[2]) / 3 < 100; };
+  const q = new Int32Array(N);
+  let qh = 0, qt = 0;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const k = y * w + x;
+      if (!isContent(k) || isWall(k)) continue;
+      let hit = -1, cnt = 0;
+      for (let r = 0; r < boxes.length; r++) {
+        const b = boxes[r];
+        if (b && x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1) { hit = r; cnt++; if (cnt > 1) break; }
       }
+      if (cnt === 1) { owner[k] = hit; q[qt++] = k; }
     }
   }
-  // domknij dziury po trasie/ikonach (2 przebiegi dylatacji po pikselach nietłowych)
-  for (let pass = 0; pass < 3; pass++) {
+  while (qh < qt) {
+    const k = q[qh++];
+    const o = owner[k];
+    const x = k % w, y = (k - x) / w;
+    const nb = [x > 0 ? k - 1 : -1, x < w - 1 ? k + 1 : -1, y > 0 ? k - w : -1, y < h - 1 ? k + w : -1];
+    for (const n of nb) {
+      if (n < 0 || owner[n] !== -1 || !isContent(n) || isWall(n)) continue;
+      const nx = n % w, ny = (n - nx) / w;
+      if (!inBox(boxes[o], nx, ny)) continue;
+      owner[n] = o; q[qt++] = n;
+    }
+  }
+  // 4) piksele tuż poza prostokątami (ściany, progi) -> sąsiedni pokój, kilka przebiegów
+  for (let pass = 0; pass < 6; pass++) {
     const add = [];
     for (let k = 0; k < N; k++) {
-      if (owner[k] !== -1) continue;
-      const c = px(k);
-      if (c[3] < 20 || near(c, bg, 12)) continue;
+      if (owner[k] !== -1 || !isContent(k)) continue;
       const x = k % w;
-      const cand = [x > 0 ? owner[k - 1] : -1, x < w - 1 ? owner[k + 1] : -1, k >= w ? owner[k - w] : -1, k < N - w ? owner[k + w] : -1].filter((o) => o >= 0);
-      if (cand.length >= 2 && cand.every((o) => o === cand[0])) add.push(k, cand[0]);
+      const o = [x > 0 ? owner[k - 1] : -1, x < w - 1 ? owner[k + 1] : -1, k >= w ? owner[k - w] : -1, k < N - w ? owner[k + w] : -1].find((v) => v >= 0);
+      if (o !== undefined) add.push(k, o);
     }
-    for (let j = 0; j < add.length; j += 2) owner[add[j]] = add[j + 1];
+    for (let j2 = 0; j2 < add.length; j2 += 2) owner[add[j2]] = add[j2 + 1];
   }
 
   // skala: piksele na metr
@@ -758,7 +777,7 @@ h4 { margin: 0 0 6px; font-size: 14px; font-weight: 600; }
 .dim { color: var(--mx-dim); } .small { font-size: 12px; font-weight: 500; } .ok { color: var(--mx-ok); } .warn { color: var(--mx-warn); } .bad { color: var(--mx-bad); }
 button { font: inherit; color: inherit; cursor: pointer; border: 0; background: none; padding: 0; }
 button:disabled { opacity: .38; cursor: not-allowed; }
-ha-icon { --mdc-icon-size: 20px; display: inline-flex; }
+ha-icon { --mdc-icon-size: 20px; display: inline-flex; width: var(--mdc-icon-size); height: var(--mdc-icon-size); flex: 0 0 auto; }
 .link { color: var(--mx-cyan); font-size: 12.5px; }
 
 /* ===== nagłówek ===== */
@@ -840,9 +859,9 @@ ha-icon { --mdc-icon-size: 20px; display: inline-flex; }
 .map-charger { fill: rgba(56,229,155,.35); stroke: var(--mx-ok); stroke-width: 3; }
 .anc { fill: transparent; }
 .map-labels { position:absolute; inset:0; pointer-events:none; }
-.mlabel { position:absolute; visibility:hidden; transform: translate(-50%,-50%); pointer-events:auto; display:flex; flex-direction:column; align-items:center; gap:0; padding: 3px 6px; border-radius: 8px; text-shadow: 0 0 4px rgba(0,0,0,.95), 0 0 10px rgba(0,0,0,.8); }
-.mlabel ha-icon { --mdc-icon-size: 22px; color: #fff; filter: drop-shadow(0 0 4px var(--rc)); }
-.mlabel b { font-size: 13px; font-weight: 600; white-space: nowrap; } .mlabel span { font-size: 12px; color: #dbe9fb; }
+.mlabel { position:absolute; visibility:hidden; transform: translate(-50%,-50%); pointer-events:auto; display:flex; flex-direction:column; align-items:center; gap:0; padding: 2px 7px 3px; border-radius: 8px; background: rgba(3,10,24,.5); box-shadow: 0 0 0 1px color-mix(in srgb, var(--rc) 60%, transparent), 0 0 10px color-mix(in srgb, var(--rc) 35%, transparent); text-shadow: 0 0 4px rgba(0,0,0,.95); }
+.mlabel ha-icon { --mdc-icon-size: 17px; color: #fff; filter: drop-shadow(0 0 4px var(--rc)); }
+.mlabel b { font-size: 12.5px; font-weight: 700; white-space: nowrap; color: #fff; } .mlabel span { font-size: 11px; font-weight: 600; color: #e8f3ff; }
 .mlabel.sel { background: var(--rc); box-shadow: 0 0 14px var(--rc); color: #04101f; text-shadow: none; } .mlabel.sel span { color: #04101f; } .mlabel.sel ha-icon { color: #04101f; }
 .mlabel.cur { box-shadow: 0 0 0 1px var(--mx-ok); }
 .map-stage img { display:block; max-width:none; user-select:none; -webkit-user-drag:none; }
@@ -1112,6 +1131,18 @@ ha-icon { --mdc-icon-size: 20px; display: inline-flex; }
 .hud-frame path.hi { stroke: rgba(150,235,255,1); stroke-width: 2.5; }
 .hud-frame path.fill { fill: rgba(8,22,48,.55); stroke: none; filter: none; }
 .top > *:not(.hud-frame) { position: relative; }
+
+.mbill { position:absolute; visibility:hidden; width: var(--s, 60px); transform: translate(-50%, -78%); pointer-events:none; z-index: 2; }
+.mbill img, .mbill svg { width: 100%; height: auto; display:block; position: relative; filter: drop-shadow(0 6px 8px rgba(0,0,0,.6)) drop-shadow(0 0 10px rgba(63,216,255,.45)); }
+.mbill.robot img { -webkit-mask-image: radial-gradient(ellipse 50% 50%, #000 78%, transparent 100%); mask-image: radial-gradient(ellipse 50% 50%, #000 78%, transparent 100%); }
+.mbill.charger { width: calc(var(--s, 60px) * 0.9); transform: translate(-50%, -88%); }
+.mbill.charger img { -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 8%, #000 92%, transparent 100%); mask-image: linear-gradient(90deg, transparent 0, #000 8%, #000 92%, transparent 100%); }
+.mb-glow { position:absolute; left: 50%; bottom: 2%; width: 120%; height: 36%; transform: translateX(-50%); border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(63,216,255,.75), rgba(31,125,255,.25) 60%, transparent); }
+.mbill.robot .mb-glow { animation: mx-pulse 2s ease-in-out infinite; }
+
+.big.primary { background: linear-gradient(180deg, rgba(14,32,66,.9), rgba(6,16,36,.9)); box-shadow: 0 0 0 1px var(--mx-line), 0 0 16px rgba(31,125,255,.15) inset; }
+.big.primary.lit { background: linear-gradient(180deg, #2a8bff, #0b52d0); box-shadow: 0 0 0 1px var(--mx-line-strong), 0 0 28px rgba(31,125,255,.7); }
 `;
 
 // ===== src/views/views.js =====
@@ -1207,6 +1238,7 @@ function renderMap(c, dims) {
   const cur = toNum(c.vac?.attributes?.current_segment);
   let overlay = '';
   let labels = '';
+  let bills = '';
   if (dims && T) {
     const ppm = dims.pxPerM || Math.hypot(T(1000, 0)[0] - T(0, 0)[0], T(1000, 0)[1] - T(0, 0)[1]);
     const furn = pyParse(c.cam?.attributes?.furnitures);
@@ -1227,9 +1259,15 @@ function renderMap(c, dims) {
     const robot = rp ? (() => { const [x, y] = T(rp.x, rp.y); return `<g class="map-robot"><circle cx="${x}" cy="${y}" r="${rs * 0.7}" class="mr-glow"/>${c.config.graphics === 'svg' ? `<circle cx="${x}" cy="${y}" r="${rs / 2}" class="mr-body"/>` : `<image href="${esc(c.config.robot_image || ASSETS.robot_top)}" x="${x - rs / 2}" y="${y - rs * 0.36}" width="${rs}" height="${rs * 0.72}"/>`}</g>`; })() : '';
     const charger = cp ? (() => { const [x, y] = T(cp.x, cp.y); return `<rect class="map-charger" x="${x - ppm * 0.2}" y="${y - ppm * 0.12}" width="${ppm * 0.4}" height="${ppm * 0.24}" rx="${ppm * 0.05}"/>`; })() : '';
     const anchors = rooms.filter((rm) => rm.x !== null && rm.visible).map((rm) => { const [x, y] = T(rm.x, rm.y); return `<circle class="anc" data-anc="${rm.id}" cx="${x}" cy="${y}" r="1"/>`; }).join('');
-    overlay = `<svg class="map-overlay" viewBox="0 0 ${dims.w} ${dims.h}" width="${dims.w}" height="${dims.h}">${furnSvg}${charger}${robot}${anchors}</svg>`;
-    if (ui.labels) {
-      labels = `<div class="map-labels">${rooms.filter((rm) => rm.x !== null && rm.visible).map((rm) => {
+    const robAnc = rp ? (() => { const [x, y] = T(rp.x, rp.y); return `<circle class="anc map-robot" data-anc="robot" cx="${x}" cy="${y}" r="1"/>`; })() : '';
+    const chAnc = cp ? (() => { const [x, y] = T(cp.x, cp.y); return `<circle class="anc" data-anc="charger" cx="${x}" cy="${y}" r="1"/>`; })() : '';
+    overlay = `<svg class="map-overlay" viewBox="0 0 ${dims.w} ${dims.h}" width="${dims.w}" height="${dims.h}">${furnSvg}${anchors}${chAnc}${robAnc}</svg>`;
+    // robot i stacja jako stojące obiekty 3D (billboardy), nie spłaszczone z mapą
+    const svgMode = c.config.graphics === 'svg';
+    bills = `${cp ? `<div class="mbill charger" data-lbl="charger" data-mm="950">${svgMode ? '' : `<img src="${esc(c.config.station_image || ASSETS.station)}" alt="">`}<i class="mb-glow"></i></div>` : ''}
+      ${rp && !toBool(c.vac?.attributes?.docked) ? `<div class="mbill robot" data-lbl="robot" data-mm="700"><i class="mb-glow"></i>${svgMode ? heroRobotSvg('docked') : `<img src="${esc(c.config.robot_image || ASSETS.robot_top)}" alt="">`}</div>` : ''}`;
+    if (ui.labels || bills) {
+      labels = `<div class="map-labels">${bills}${!ui.labels ? '' : rooms.filter((rm) => rm.x !== null && rm.visible).map((rm) => {
         const area = dims.areas?.get(rm.id);
         const sel = ui.selected.has(rm.id);
         return `<button class="mlabel${sel ? ' sel' : ''}${rm.id === cur ? ' cur' : ''}" data-act="room" data-room="${rm.id}" data-lbl="${rm.id}" style="--rc:${roomColor(rm)}">
@@ -1366,7 +1404,7 @@ function renderRobot(c, visual) {
       <div class="rp-mode">${icon('mdi:robot-vacuum')}<div><b>${esc(optLabel(mode?.state))}</b><span>${esc(optLabel(suc?.state).toLowerCase())} / ${esc(optLabel(hum?.state).toLowerCase())}</span></div></div>
     </div>
     <div class="ctrl-row">
-      <button class="big primary" data-act="start" ${dis}>${icon('mdi:play')}<span>${visual === 'paused' ? PL.generic.resume : PL.generic.start}</span></button>
+      <button class="big primary ${visual === 'cleaning' ? 'lit' : ''}" data-act="start" ${dis}>${icon('mdi:play')}<span>${visual === 'paused' ? PL.generic.resume : PL.generic.start}</span></button>
       <button class="big" data-act="pause" ${dis || (visual !== 'cleaning' && visual !== 'returning' ? 'disabled' : '')}>${icon('mdi:pause')}<span>${PL.generic.pause}</span></button>
       <button class="big" data-act="dock" ${dis}>${icon('mdi:home')}<span>${PL.generic.dock}</span></button>
     </div>
@@ -1621,6 +1659,39 @@ function renderRoomDetails(c) {
 
 const VERSION = '0.1.0';
 
+// Minimalny „morph”: aktualizuje istniejący DOM do nowego HTML bez jego
+// przebudowy. Zachowuje obrazki, canvas mapy, fokus i wysokość karty.
+function morphChildren(from, to) {
+  const fc = [...from.childNodes];
+  const tc = [...to.childNodes];
+  tc.forEach((t, i) => {
+    if (i < fc.length) morphNode(fc[i], t);
+    else from.appendChild(t);
+  });
+  for (let i = tc.length; i < fc.length; i++) fc[i].remove();
+}
+
+function morphNode(a, b) {
+  if (a.nodeType !== b.nodeType || a.nodeName !== b.nodeName) { a.replaceWith(b); return; }
+  if (a.nodeType === 3 || a.nodeType === 8) { if (a.nodeValue !== b.nodeValue) a.nodeValue = b.nodeValue; return; }
+  if (a.nodeType !== 1) return;
+  const keepStyle = a.classList.contains('map-stage') || a.classList.contains('map-3d') || a.classList.contains('mlabel') || a.classList.contains('mbill');
+  for (const at of [...a.attributes]) {
+    if (!b.hasAttribute(at.name) && !(keepStyle && at.name === 'style')) a.removeAttribute(at.name);
+  }
+  for (const at of [...b.attributes]) {
+    if (keepStyle && at.name === 'style') continue;
+    if (a.getAttribute(at.name) !== at.value) a.setAttribute(at.name, at.value);
+  }
+  if (a.classList.contains('img-slot')) return; // zawartość mapy zarządzana ręcznie
+  if (a.nodeName === 'HA-ICON' || a.nodeName === 'IMG') return; // komponenty z własną zawartością
+  morphChildren(a, b);
+  if (a.nodeName === 'SELECT') {
+    const sel = b.querySelector('option[selected]');
+    if (sel && a.value !== sel.value) a.value = sel.value;
+  }
+}
+
 class MieciuX50Card extends HTMLElement {
   constructor() {
     super();
@@ -1729,7 +1800,10 @@ class MieciuX50Card extends HTMLElement {
       body = page(renderSettings(c));
     }
 
-    this.shadowRoot.innerHTML = `<style>${STYLES}</style>
+    // szkielet tworzymy raz; potem tylko „łatamy” różnice (morph), żeby nie
+    // przeładowywać obrazków i nie zmieniać wysokości karty (skok przewijania)
+    if (!this._root) {
+      this.shadowRoot.innerHTML = `<style>${STYLES}</style>
       <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
         <filter id="mx-holo" color-interpolation-filters="sRGB">
           <feColorMatrix type="matrix" values="-1 0 0 0 1  0 -1 0 0 1  0 0 -1 0 1  0 0 0 1 0"/>
@@ -1738,11 +1812,14 @@ class MieciuX50Card extends HTMLElement {
           <feComponentTransfer><feFuncR type="linear" slope="1.35"/><feFuncG type="linear" slope="1.35"/><feFuncB type="linear" slope="1.5"/></feComponentTransfer>
           <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  1.6 1.6 1.6 0 -0.12"/>
         </filter></defs></svg>
-      <ha-card class="root">
-        ${renderTop(c, visual)}
+      <ha-card class="root"></ha-card>`;
+      this._root = this.shadowRoot.querySelector('ha-card');
+    }
+    const tpl = document.createElement('template');
+    tpl.innerHTML = `${renderTop(c, visual)}
         ${body}
-        ${this._toastMsg ? `<div class="toast">${this._toastMsg.replace(/</g, '&lt;')}</div>` : ''}
-      </ha-card>`;
+        ${this._toastMsg ? `<div class="toast">${this._toastMsg.replace(/</g, '&lt;')}</div>` : ''}`;
+    morphChildren(this._root, tpl.content);
 
     this._mountMap(c);
     this._bind();
@@ -1768,6 +1845,7 @@ class MieciuX50Card extends HTMLElement {
         this._neon = T ? renderNeonMap(pre, rooms, T) : null;
         this._neonMask = null;
         this._neonLayers = null;
+        this._scanEl = null;
         if (this._neon) { this._neon.canvas.className = 'neon'; this._ui.areas = this._neon.areas; }
         const dims = { w: pre.naturalWidth, h: pre.naturalHeight, areas: this._neon?.areas, pxPerM: this._neon?.pxPerM };
         const changed = !this._mapDims || dims.w !== this._mapDims.w || dims.h !== this._mapDims.h;
@@ -1797,18 +1875,21 @@ class MieciuX50Card extends HTMLElement {
           return cv;
         });
       }
-      this._neonLayers.slice().reverse().forEach((l) => slot.appendChild(l));
-    }
-    slot.appendChild(useNeon ? this._neon.canvas : this._mapImg);
+      }
+    const want = useNeon ? [...this._neonLayers.slice().reverse(), this._neon.canvas] : [this._mapImg];
     if (useNeon) {
-      // wiązka skanera tylko na kształcie mapy
-      if (!this._neonMask) { try { this._neonMask = this._neon.canvas.toDataURL(); } catch (_) { this._neonMask = ''; } }
-      const scan = document.createElement('div');
-      scan.className = 'holo-scan';
-      scan.innerHTML = '<i></i>';
-      if (this._neonMask) scan.style.setProperty('--mask', `url(${this._neonMask})`);
-      slot.appendChild(scan);
+      // wiązka skanera tylko na kształcie mapy (tworzona raz)
+      if (!this._scanEl) {
+        if (!this._neonMask) { try { this._neonMask = this._neon.canvas.toDataURL(); } catch (_) { this._neonMask = ''; } }
+        this._scanEl = document.createElement('div');
+        this._scanEl.className = 'holo-scan';
+        this._scanEl.innerHTML = '<i></i>';
+        if (this._neonMask) this._scanEl.style.setProperty('--mask', `url(${this._neonMask})`);
+      }
+      want.push(this._scanEl);
     }
+    const cur = [...slot.children];
+    if (cur.length !== want.length || cur.some((el, i) => el !== want[i])) slot.replaceChildren(...want);
     this._applyView();
   }
 
@@ -1816,12 +1897,15 @@ class MieciuX50Card extends HTMLElement {
     const view = this.shadowRoot.querySelector('.map-view');
     if (!view) return;
     const vr = view.getBoundingClientRect();
-    this.shadowRoot.querySelectorAll('.mlabel').forEach((lb) => {
+    const ppm = this._mapDims?.pxPerM || 80;
+    const z = this._view.z || 0.3;
+    this.shadowRoot.querySelectorAll('.mlabel, .mbill').forEach((lb) => {
       const anc = this.shadowRoot.querySelector(`[data-anc="${lb.dataset.lbl}"]`);
       if (!anc) return;
       const r = anc.getBoundingClientRect();
       lb.style.left = `${r.left + r.width / 2 - vr.left}px`;
       lb.style.top = `${r.top + r.height / 2 - vr.top}px`;
+      if (lb.dataset.mm) lb.style.setProperty('--s', `${Math.max(28, (Number(lb.dataset.mm) / 1000) * ppm * z * 2.2)}px`);
       lb.style.visibility = 'visible';
     });
   }
@@ -1837,7 +1921,7 @@ class MieciuX50Card extends HTMLElement {
       const rot = this._mapRot();
       const sw = rot % 180 === 0;
       const bw = sw ? bb.x1 - bb.x0 : bb.y1 - bb.y0, bh = sw ? bb.y1 - bb.y0 : bb.x1 - bb.x0;
-      const z = this._ui.map3d ? Math.min(vw / bw, vh / bh) * 0.98 : Math.min(vw / bw, vh / bh) * 0.92;
+      const z = this._ui.map3d ? Math.min(vw / bw, vh / bh) * 0.86 : Math.min(vw / bw, vh / bh) * 0.92;
       const dx = (bb.x0 + bb.x1) / 2 - w / 2, dy = (bb.y0 + bb.y1) / 2 - h / 2;
       const rad = (rot * Math.PI) / 180;
       const rx = dx * Math.cos(rad) - dy * Math.sin(rad), ry = dx * Math.sin(rad) + dy * Math.cos(rad);

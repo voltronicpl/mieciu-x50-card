@@ -26,45 +26,63 @@ export function renderNeonMap(img, rooms, T) {
   const near = (a, b, tol) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]) <= tol;
   const bg = px(0);
 
-  const seeds = [];
-  rooms.forEach((r, idx) => {
-    if (r.x === null || r.y === null) return;
-    let [sx, sy] = T(r.x, r.y);
-    sx = Math.round(sx); sy = Math.round(sy);
-    if (sx < 0 || sy < 0 || sx >= w || sy >= h) return;
-    seeds.push({ idx, i: sy * w + sx });
+  // 1) co jest tłem, a co zmapowanym obszarem (podłoga, ściany, napisy, trasa…)
+  const isContent = (k) => { const c = px(k); return c[3] >= 20 && !near(c, bg, 14); };
+
+  // 2) prostokąty pokoi z integracji (mm) -> piksele obrazu
+  const boxes = rooms.map((r) => {
+    if ([r.x0, r.y0, r.x1, r.y1].some((v) => v === null || v === undefined)) return null;
+    const pts = [T(r.x0, r.y0), T(r.x1, r.y0), T(r.x0, r.y1), T(r.x1, r.y1)];
+    const xs = pts.map((q) => q[0]), ys = pts.map((q) => q[1]);
+    const [cx, cy] = r.x !== null && r.y !== null ? T(r.x, r.y) : [(Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2];
+    return { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys), cx, cy };
   });
 
-  // flood fill każdego pokoju
-  const stack = new Int32Array(N);
-  for (const { idx, i } of seeds) {
-    if (owner[i] !== -1) continue;
-    const col = px(i);
-    if (col[3] < 20 || near(col, bg, 12)) continue;
-    let sp = 0; stack[sp++] = i; owner[i] = idx;
-    while (sp) {
-      const k = stack[--sp];
-      const x = k % w, y = (k - x) / w;
-      const nb = [x > 0 ? k - 1 : -1, x < w - 1 ? k + 1 : -1, y > 0 ? k - w : -1, y < h - 1 ? k + w : -1];
-      for (const n of nb) {
-        if (n < 0 || owner[n] !== -1) continue;
-        const c = px(n);
-        if (c[3] > 20 && near(c, col, 36)) { owner[n] = idx; stack[sp++] = n; }
+  // 3) przypisanie „rozrostem”: start z pikseli należących tylko do jednego prostokąta,
+  //    potem BFS przez zmapowany obszar (ciemne ściany blokują), ograniczony do
+  //    własnego prostokąta (+ mały margines). Sporne strefy dzieli odległość po podłodze.
+  //    Kolory i napisy integracji są ignorowane — liczy się tylko geometria.
+  const [ax0, ay0] = T(0, 0), [ax1, ay1] = T(1000, 0);
+  const ppm = Math.hypot(ax1 - ax0, ay1 - ay0) || 80;
+  const mg = ppm * 0.12;
+  const inBox = (b, x, y) => b && x >= b.x0 - mg && x <= b.x1 + mg && y >= b.y0 - mg && y <= b.y1 + mg;
+  const isWall = (k) => { const c = px(k); return (c[0] + c[1] + c[2]) / 3 < 100; };
+  const q = new Int32Array(N);
+  let qh = 0, qt = 0;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const k = y * w + x;
+      if (!isContent(k) || isWall(k)) continue;
+      let hit = -1, cnt = 0;
+      for (let r = 0; r < boxes.length; r++) {
+        const b = boxes[r];
+        if (b && x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1) { hit = r; cnt++; if (cnt > 1) break; }
       }
+      if (cnt === 1) { owner[k] = hit; q[qt++] = k; }
     }
   }
-  // domknij dziury po trasie/ikonach (2 przebiegi dylatacji po pikselach nietłowych)
-  for (let pass = 0; pass < 3; pass++) {
+  while (qh < qt) {
+    const k = q[qh++];
+    const o = owner[k];
+    const x = k % w, y = (k - x) / w;
+    const nb = [x > 0 ? k - 1 : -1, x < w - 1 ? k + 1 : -1, y > 0 ? k - w : -1, y < h - 1 ? k + w : -1];
+    for (const n of nb) {
+      if (n < 0 || owner[n] !== -1 || !isContent(n) || isWall(n)) continue;
+      const nx = n % w, ny = (n - nx) / w;
+      if (!inBox(boxes[o], nx, ny)) continue;
+      owner[n] = o; q[qt++] = n;
+    }
+  }
+  // 4) piksele tuż poza prostokątami (ściany, progi) -> sąsiedni pokój, kilka przebiegów
+  for (let pass = 0; pass < 6; pass++) {
     const add = [];
     for (let k = 0; k < N; k++) {
-      if (owner[k] !== -1) continue;
-      const c = px(k);
-      if (c[3] < 20 || near(c, bg, 12)) continue;
+      if (owner[k] !== -1 || !isContent(k)) continue;
       const x = k % w;
-      const cand = [x > 0 ? owner[k - 1] : -1, x < w - 1 ? owner[k + 1] : -1, k >= w ? owner[k - w] : -1, k < N - w ? owner[k + w] : -1].filter((o) => o >= 0);
-      if (cand.length >= 2 && cand.every((o) => o === cand[0])) add.push(k, cand[0]);
+      const o = [x > 0 ? owner[k - 1] : -1, x < w - 1 ? owner[k + 1] : -1, k >= w ? owner[k - w] : -1, k < N - w ? owner[k + w] : -1].find((v) => v >= 0);
+      if (o !== undefined) add.push(k, o);
     }
-    for (let j = 0; j < add.length; j += 2) owner[add[j]] = add[j + 1];
+    for (let j2 = 0; j2 < add.length; j2 += 2) owner[add[j2]] = add[j2 + 1];
   }
 
   // skala: piksele na metr

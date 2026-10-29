@@ -91,6 +91,7 @@ export function renderMap(c, dims) {
   const cur = toNum(c.vac?.attributes?.current_segment);
   let overlay = '';
   let labels = '';
+  let bills = '';
   if (dims && T) {
     const ppm = dims.pxPerM || Math.hypot(T(1000, 0)[0] - T(0, 0)[0], T(1000, 0)[1] - T(0, 0)[1]);
     const furn = pyParse(c.cam?.attributes?.furnitures);
@@ -111,9 +112,15 @@ export function renderMap(c, dims) {
     const robot = rp ? (() => { const [x, y] = T(rp.x, rp.y); return `<g class="map-robot"><circle cx="${x}" cy="${y}" r="${rs * 0.7}" class="mr-glow"/>${c.config.graphics === 'svg' ? `<circle cx="${x}" cy="${y}" r="${rs / 2}" class="mr-body"/>` : `<image href="${esc(c.config.robot_image || ASSETS.robot_top)}" x="${x - rs / 2}" y="${y - rs * 0.36}" width="${rs}" height="${rs * 0.72}"/>`}</g>`; })() : '';
     const charger = cp ? (() => { const [x, y] = T(cp.x, cp.y); return `<rect class="map-charger" x="${x - ppm * 0.2}" y="${y - ppm * 0.12}" width="${ppm * 0.4}" height="${ppm * 0.24}" rx="${ppm * 0.05}"/>`; })() : '';
     const anchors = rooms.filter((rm) => rm.x !== null && rm.visible).map((rm) => { const [x, y] = T(rm.x, rm.y); return `<circle class="anc" data-anc="${rm.id}" cx="${x}" cy="${y}" r="1"/>`; }).join('');
-    overlay = `<svg class="map-overlay" viewBox="0 0 ${dims.w} ${dims.h}" width="${dims.w}" height="${dims.h}">${furnSvg}${charger}${robot}${anchors}</svg>`;
-    if (ui.labels) {
-      labels = `<div class="map-labels">${rooms.filter((rm) => rm.x !== null && rm.visible).map((rm) => {
+    const robAnc = rp ? (() => { const [x, y] = T(rp.x, rp.y); return `<circle class="anc map-robot" data-anc="robot" cx="${x}" cy="${y}" r="1"/>`; })() : '';
+    const chAnc = cp ? (() => { const [x, y] = T(cp.x, cp.y); return `<circle class="anc" data-anc="charger" cx="${x}" cy="${y}" r="1"/>`; })() : '';
+    overlay = `<svg class="map-overlay" viewBox="0 0 ${dims.w} ${dims.h}" width="${dims.w}" height="${dims.h}">${furnSvg}${anchors}${chAnc}${robAnc}</svg>`;
+    // robot i stacja jako stojące obiekty 3D (billboardy), nie spłaszczone z mapą
+    const svgMode = c.config.graphics === 'svg';
+    bills = `${cp ? `<div class="mbill charger" data-lbl="charger" data-mm="950">${svgMode ? '' : `<img src="${esc(c.config.station_image || ASSETS.station)}" alt="">`}<i class="mb-glow"></i></div>` : ''}
+      ${rp && !toBool(c.vac?.attributes?.docked) ? `<div class="mbill robot" data-lbl="robot" data-mm="700"><i class="mb-glow"></i>${svgMode ? heroRobotSvg('docked') : `<img src="${esc(c.config.robot_image || ASSETS.robot_top)}" alt="">`}</div>` : ''}`;
+    if (ui.labels || bills) {
+      labels = `<div class="map-labels">${bills}${!ui.labels ? '' : rooms.filter((rm) => rm.x !== null && rm.visible).map((rm) => {
         const area = dims.areas?.get(rm.id);
         const sel = ui.selected.has(rm.id);
         return `<button class="mlabel${sel ? ' sel' : ''}${rm.id === cur ? ' cur' : ''}" data-act="room" data-room="${rm.id}" data-lbl="${rm.id}" style="--rc:${roomColor(rm)}">
@@ -250,7 +257,7 @@ export function renderRobot(c, visual) {
       <div class="rp-mode">${icon('mdi:robot-vacuum')}<div><b>${esc(optLabel(mode?.state))}</b><span>${esc(optLabel(suc?.state).toLowerCase())} / ${esc(optLabel(hum?.state).toLowerCase())}</span></div></div>
     </div>
     <div class="ctrl-row">
-      <button class="big primary" data-act="start" ${dis}>${icon('mdi:play')}<span>${visual === 'paused' ? PL.generic.resume : PL.generic.start}</span></button>
+      <button class="big primary ${visual === 'cleaning' ? 'lit' : ''}" data-act="start" ${dis}>${icon('mdi:play')}<span>${visual === 'paused' ? PL.generic.resume : PL.generic.start}</span></button>
       <button class="big" data-act="pause" ${dis || (visual !== 'cleaning' && visual !== 'returning' ? 'disabled' : '')}>${icon('mdi:pause')}<span>${PL.generic.pause}</span></button>
       <button class="big" data-act="dock" ${dis}>${icon('mdi:home')}<span>${PL.generic.dock}</span></button>
     </div>

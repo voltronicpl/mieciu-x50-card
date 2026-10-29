@@ -11,6 +11,39 @@ import {
 
 const VERSION = '0.1.0';
 
+// Minimalny „morph”: aktualizuje istniejący DOM do nowego HTML bez jego
+// przebudowy. Zachowuje obrazki, canvas mapy, fokus i wysokość karty.
+function morphChildren(from, to) {
+  const fc = [...from.childNodes];
+  const tc = [...to.childNodes];
+  tc.forEach((t, i) => {
+    if (i < fc.length) morphNode(fc[i], t);
+    else from.appendChild(t);
+  });
+  for (let i = tc.length; i < fc.length; i++) fc[i].remove();
+}
+
+function morphNode(a, b) {
+  if (a.nodeType !== b.nodeType || a.nodeName !== b.nodeName) { a.replaceWith(b); return; }
+  if (a.nodeType === 3 || a.nodeType === 8) { if (a.nodeValue !== b.nodeValue) a.nodeValue = b.nodeValue; return; }
+  if (a.nodeType !== 1) return;
+  const keepStyle = a.classList.contains('map-stage') || a.classList.contains('map-3d') || a.classList.contains('mlabel') || a.classList.contains('mbill');
+  for (const at of [...a.attributes]) {
+    if (!b.hasAttribute(at.name) && !(keepStyle && at.name === 'style')) a.removeAttribute(at.name);
+  }
+  for (const at of [...b.attributes]) {
+    if (keepStyle && at.name === 'style') continue;
+    if (a.getAttribute(at.name) !== at.value) a.setAttribute(at.name, at.value);
+  }
+  if (a.classList.contains('img-slot')) return; // zawartość mapy zarządzana ręcznie
+  if (a.nodeName === 'HA-ICON' || a.nodeName === 'IMG') return; // komponenty z własną zawartością
+  morphChildren(a, b);
+  if (a.nodeName === 'SELECT') {
+    const sel = b.querySelector('option[selected]');
+    if (sel && a.value !== sel.value) a.value = sel.value;
+  }
+}
+
 class MieciuX50Card extends HTMLElement {
   constructor() {
     super();
@@ -119,7 +152,10 @@ class MieciuX50Card extends HTMLElement {
       body = page(renderSettings(c));
     }
 
-    this.shadowRoot.innerHTML = `<style>${STYLES}</style>
+    // szkielet tworzymy raz; potem tylko „łatamy” różnice (morph), żeby nie
+    // przeładowywać obrazków i nie zmieniać wysokości karty (skok przewijania)
+    if (!this._root) {
+      this.shadowRoot.innerHTML = `<style>${STYLES}</style>
       <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
         <filter id="mx-holo" color-interpolation-filters="sRGB">
           <feColorMatrix type="matrix" values="-1 0 0 0 1  0 -1 0 0 1  0 0 -1 0 1  0 0 0 1 0"/>
@@ -128,11 +164,14 @@ class MieciuX50Card extends HTMLElement {
           <feComponentTransfer><feFuncR type="linear" slope="1.35"/><feFuncG type="linear" slope="1.35"/><feFuncB type="linear" slope="1.5"/></feComponentTransfer>
           <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  1.6 1.6 1.6 0 -0.12"/>
         </filter></defs></svg>
-      <ha-card class="root">
-        ${renderTop(c, visual)}
+      <ha-card class="root"></ha-card>`;
+      this._root = this.shadowRoot.querySelector('ha-card');
+    }
+    const tpl = document.createElement('template');
+    tpl.innerHTML = `${renderTop(c, visual)}
         ${body}
-        ${this._toastMsg ? `<div class="toast">${this._toastMsg.replace(/</g, '&lt;')}</div>` : ''}
-      </ha-card>`;
+        ${this._toastMsg ? `<div class="toast">${this._toastMsg.replace(/</g, '&lt;')}</div>` : ''}`;
+    morphChildren(this._root, tpl.content);
 
     this._mountMap(c);
     this._bind();
@@ -158,6 +197,7 @@ class MieciuX50Card extends HTMLElement {
         this._neon = T ? renderNeonMap(pre, rooms, T) : null;
         this._neonMask = null;
         this._neonLayers = null;
+        this._scanEl = null;
         if (this._neon) { this._neon.canvas.className = 'neon'; this._ui.areas = this._neon.areas; }
         const dims = { w: pre.naturalWidth, h: pre.naturalHeight, areas: this._neon?.areas, pxPerM: this._neon?.pxPerM };
         const changed = !this._mapDims || dims.w !== this._mapDims.w || dims.h !== this._mapDims.h;
@@ -187,18 +227,21 @@ class MieciuX50Card extends HTMLElement {
           return cv;
         });
       }
-      this._neonLayers.slice().reverse().forEach((l) => slot.appendChild(l));
-    }
-    slot.appendChild(useNeon ? this._neon.canvas : this._mapImg);
+      }
+    const want = useNeon ? [...this._neonLayers.slice().reverse(), this._neon.canvas] : [this._mapImg];
     if (useNeon) {
-      // wiązka skanera tylko na kształcie mapy
-      if (!this._neonMask) { try { this._neonMask = this._neon.canvas.toDataURL(); } catch (_) { this._neonMask = ''; } }
-      const scan = document.createElement('div');
-      scan.className = 'holo-scan';
-      scan.innerHTML = '<i></i>';
-      if (this._neonMask) scan.style.setProperty('--mask', `url(${this._neonMask})`);
-      slot.appendChild(scan);
+      // wiązka skanera tylko na kształcie mapy (tworzona raz)
+      if (!this._scanEl) {
+        if (!this._neonMask) { try { this._neonMask = this._neon.canvas.toDataURL(); } catch (_) { this._neonMask = ''; } }
+        this._scanEl = document.createElement('div');
+        this._scanEl.className = 'holo-scan';
+        this._scanEl.innerHTML = '<i></i>';
+        if (this._neonMask) this._scanEl.style.setProperty('--mask', `url(${this._neonMask})`);
+      }
+      want.push(this._scanEl);
     }
+    const cur = [...slot.children];
+    if (cur.length !== want.length || cur.some((el, i) => el !== want[i])) slot.replaceChildren(...want);
     this._applyView();
   }
 
@@ -206,12 +249,15 @@ class MieciuX50Card extends HTMLElement {
     const view = this.shadowRoot.querySelector('.map-view');
     if (!view) return;
     const vr = view.getBoundingClientRect();
-    this.shadowRoot.querySelectorAll('.mlabel').forEach((lb) => {
+    const ppm = this._mapDims?.pxPerM || 80;
+    const z = this._view.z || 0.3;
+    this.shadowRoot.querySelectorAll('.mlabel, .mbill').forEach((lb) => {
       const anc = this.shadowRoot.querySelector(`[data-anc="${lb.dataset.lbl}"]`);
       if (!anc) return;
       const r = anc.getBoundingClientRect();
       lb.style.left = `${r.left + r.width / 2 - vr.left}px`;
       lb.style.top = `${r.top + r.height / 2 - vr.top}px`;
+      if (lb.dataset.mm) lb.style.setProperty('--s', `${Math.max(28, (Number(lb.dataset.mm) / 1000) * ppm * z * 2.2)}px`);
       lb.style.visibility = 'visible';
     });
   }
@@ -227,7 +273,7 @@ class MieciuX50Card extends HTMLElement {
       const rot = this._mapRot();
       const sw = rot % 180 === 0;
       const bw = sw ? bb.x1 - bb.x0 : bb.y1 - bb.y0, bh = sw ? bb.y1 - bb.y0 : bb.x1 - bb.x0;
-      const z = this._ui.map3d ? Math.min(vw / bw, vh / bh) * 0.98 : Math.min(vw / bw, vh / bh) * 0.92;
+      const z = this._ui.map3d ? Math.min(vw / bw, vh / bh) * 0.86 : Math.min(vw / bw, vh / bh) * 0.92;
       const dx = (bb.x0 + bb.x1) / 2 - w / 2, dy = (bb.y0 + bb.y1) / 2 - h / 2;
       const rad = (rot * Math.PI) / 180;
       const rx = dx * Math.cos(rad) - dy * Math.sin(rad), ry = dx * Math.sin(rad) + dy * Math.cos(rad);

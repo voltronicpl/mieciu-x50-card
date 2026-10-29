@@ -43,6 +43,7 @@ export function getRooms(vacState, mapState) {
         id: Number(r.room_id), name: r.name, icon: r.icon, order: toNum(r.order),
         x: toNum(r.x), y: toNum(r.y), floor: r.floor_material, visible: r.visibility !== 'Hidden',
         color: toNum(r.color_index),
+        x0: toNum(r.x0), y0: toNum(r.y0), x1: toNum(r.x1), y1: toNum(r.y1),
       });
     }
   }
