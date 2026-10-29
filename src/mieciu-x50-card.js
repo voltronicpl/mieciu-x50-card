@@ -2,7 +2,8 @@ import { STYLES } from './styles.js';
 import { resolveEntities, discoverSwitches } from './adapter/entities.js';
 import { Commands } from './adapter/commands.js';
 import { deriveRobotVisualState } from './state/visual-state.js';
-import { getRooms } from './adapter/map.js';
+import { getRooms, buildTransform } from './adapter/map.js';
+import { renderNeonMap } from './adapter/map-render.js';
 import {
   makeCtx, renderTop, renderErrorBanner, renderNav, renderMap, renderStation, renderRobot, renderModes,
   renderRooms, renderAdvanced, renderService, renderHistory, renderSettings, renderRoomDetails,
@@ -140,21 +141,41 @@ class MieciuX50Card extends HTMLElement {
       this._mapImg.alt = 'Mapa';
       this._mapImg.draggable = false;
     }
-    this._mapImg.className = this._ui.holo ? 'holo' : '';
     if (url && url !== this._mapUrl) {
       this._mapUrl = url;
       const pre = new Image();
       pre.onload = () => {
         this._mapImg.src = url;
-        const dims = { w: pre.naturalWidth, h: pre.naturalHeight };
+        const T = buildTransform(c.cam?.attributes?.calibration_points);
+        const rooms = getRooms(c.vac, c.cam);
+        this._neon = T ? renderNeonMap(pre, rooms, T) : null;
+        if (this._neon) { this._neon.canvas.className = 'neon'; this._ui.areas = this._neon.areas; }
+        const dims = { w: pre.naturalWidth, h: pre.naturalHeight, areas: this._neon?.areas, pxPerM: this._neon?.pxPerM };
         const changed = !this._mapDims || dims.w !== this._mapDims.w || dims.h !== this._mapDims.h;
         this._mapDims = dims;
-        if (changed) { this._view.z = null; this._schedule(); }
+        if (changed) this._view.z = null;
+        this._schedule();
       };
       pre.src = url;
     }
-    slot.appendChild(this._mapImg);
+    const useNeon = this._ui.holo && this._neon;
+    this._mapImg.className = this._ui.holo && !this._neon ? 'holo' : '';
+    slot.appendChild(useNeon ? this._neon.canvas : this._mapImg);
     this._applyView();
+  }
+
+  _placeLabels() {
+    const view = this.shadowRoot.querySelector('.map-view');
+    if (!view) return;
+    const vr = view.getBoundingClientRect();
+    this.shadowRoot.querySelectorAll('.mlabel').forEach((lb) => {
+      const anc = this.shadowRoot.querySelector(`[data-anc="${lb.dataset.lbl}"]`);
+      if (!anc) return;
+      const r = anc.getBoundingClientRect();
+      lb.style.left = `${r.left + r.width / 2 - vr.left}px`;
+      lb.style.top = `${r.top + r.height / 2 - vr.top}px`;
+      lb.style.visibility = 'visible';
+    });
   }
 
   _applyView() {
@@ -164,12 +185,39 @@ class MieciuX50Card extends HTMLElement {
     const { w, h } = this._mapDims;
     if (this._view.z === null) {
       const vw = view.clientWidth || 600, vh = view.clientHeight || 340;
-      this._view = { x: 0, y: 0, z: Math.min(vw / w, vh / h) * (this._ui.map3d ? 1.25 : 0.95) };
+      const bb = this._neon?.bbox || { x0: 0, y0: 0, x1: w, y1: h };
+      const rot = this._mapRot();
+      const sw = rot % 180 === 0;
+      const bw = sw ? bb.x1 - bb.x0 : bb.y1 - bb.y0, bh = sw ? bb.y1 - bb.y0 : bb.x1 - bb.x0;
+      const z = this._ui.map3d ? Math.min(vw / bw, vh / bh) * 0.82 : Math.min(vw / bw, vh / bh) * 0.92;
+      const dx = (bb.x0 + bb.x1) / 2 - w / 2, dy = (bb.y0 + bb.y1) / 2 - h / 2;
+      const rad = (rot * Math.PI) / 180;
+      const rx = dx * Math.cos(rad) - dy * Math.sin(rad), ry = dx * Math.sin(rad) + dy * Math.cos(rad);
+      this._view = { x: -rx * z, y: -ry * z + (this._ui.map3d ? vh * 0.05 : 0), z };
     }
     const { x, y, z } = this._view;
+    const m3 = this.shadowRoot.querySelector('.map-3d');
+    if (m3) {
+      const rot = this._mapRot();
+      m3.style.transform = this._ui.map3d ? `perspective(2400px) rotateX(42deg) rotateZ(${rot - 20}deg)` : `rotate(${rot}deg)`;
+      const cmp = this.shadowRoot.querySelector('.compass');
+      if (cmp) cmp.style.transform = `rotate(${rot + (this._ui.map3d ? -20 : 0)}deg)`;
+    }
     stage.style.width = `${w}px`;
     stage.style.height = `${h}px`;
     stage.style.transform = `translate(${x}px, ${y}px) scale(${z}) translate(${-w / 2}px, ${-h / 2}px)`;
+    this._placeLabels();
+    clearTimeout(this._lblT);
+    this._lblT = setTimeout(() => this._placeLabels(), 700);
+  }
+
+  // obrót wizualny mapy (nie zmienia ustawień robota): auto = poziomo
+  _mapRot() {
+    const r = this._config.map_rotate ?? 'auto';
+    if (r !== 'auto') return Number(r) || 0;
+    const bb = this._neon?.bbox;
+    if (!bb) return 0;
+    return (bb.y1 - bb.y0) > (bb.x1 - bb.x0) * 1.15 ? -90 : 0;
   }
 
   _zoom(factor) {

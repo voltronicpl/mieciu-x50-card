@@ -9,6 +9,8 @@ const order = [
   'src/adapter/capability-detection.js',
   'src/adapter/commands.js',
   'src/adapter/map.js',
+  'src/adapter/map-render.js',
+  'src/graphics/assets.js',
   'src/state/visual-state.js',
   'src/graphics/station.js',
   'src/styles.js',

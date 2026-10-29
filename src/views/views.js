@@ -5,11 +5,13 @@ import { esc, toNum, toBool, fmtNum, fmtMinutes, isUnavail, pyParse } from '../u
 import { SERVICE_ITEMS, roomEntity, discoverSwitches } from '../adapter/entities.js';
 import { stationSvg, heroRobotSvg, tankSvg } from '../graphics/station.js';
 import { tankStatus, STATION_ACTIVE } from '../state/visual-state.js';
-import { buildTransform, getRooms } from '../adapter/map.js';
+import { buildTransform, getRooms, getRobotPosition, getChargerPosition } from '../adapter/map.js';
+import { ASSETS } from '../graphics/assets.js';
+import { NEON } from '../adapter/map-render.js';
 
 const icon = (i, cls = '') => `<ha-icon class="${cls}" icon="${esc(i)}"></ha-icon>`;
 const pct = (v) => Math.max(0, Math.min(100, toNum(v) ?? 0));
-export const ROOM_COLORS = ['#ffb347', '#3fa9ff', '#c86bff', '#38e59b', '#ff6fb1'];
+export const ROOM_COLORS = NEON;
 const roomColor = (r) => ROOM_COLORS[((r.color ?? r.id) % ROOM_COLORS.length + ROOM_COLORS.length) % ROOM_COLORS.length];
 const opts = (so) => (Array.isArray(so?.attributes?.options) ? so.attributes.options : (pyParse(so?.attributes?.options) || []));
 
@@ -41,7 +43,7 @@ export function renderTop(c, visual) {
   const date = now.toLocaleDateString('pl-PL', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }).replace(/^./, (x) => x.toUpperCase()).replace('.,', ',');
   return `
   <header class="top">
-    <div class="brand">${heroRobotSvg(visual, { image: c.config.robot_image })}<div><h1>${esc(c.config.name || 'Mieciu')}</h1><small>${esc(c.config.model || 'Dreame X50 Ultra')}</small></div></div>
+    <div class="brand">${c.config.graphics === 'svg' ? heroRobotSvg(visual) : `<img class="hdr-robot" src="${esc(c.config.robot_image || ASSETS.robot_top)}" alt="">`}<div><h1>${esc(c.config.name || 'Mieciu')}</h1><small>${esc(c.config.model || 'Dreame X50 Ultra')}</small></div></div>
     <div class="tele">
       ${chip(batt === null ? 'mdi:battery-unknown' : chg === 'charging' ? 'mdi:battery-charging' : 'mdi:battery', batt === null ? '—' : `${batt}%`, battLab, 'c-batt')}
       ${chip('mdi:home', PL.visual[visual] || '—', 'Stan', 'c-home')}
@@ -81,18 +83,30 @@ export function renderMap(c, dims) {
   const T = buildTransform(c.cam?.attributes?.calibration_points);
   const cur = toNum(c.vac?.attributes?.current_segment);
   let overlay = '';
-  if (dims && T && ui.labels) {
-    const s = Math.max(dims.w, dims.h) / 46;
-    overlay = `<svg class="map-overlay" viewBox="0 0 ${dims.w} ${dims.h}" width="${dims.w}" height="${dims.h}">
-      ${rooms.filter((rm) => rm.x !== null && rm.visible).map((rm) => {
-        const [px, py] = T(rm.x, rm.y);
+  let labels = '';
+  if (dims && T) {
+    const ppm = dims.pxPerM || Math.hypot(T(1000, 0)[0] - T(0, 0)[0], T(1000, 0)[1] - T(0, 0)[1]);
+    const furn = pyParse(c.cam?.attributes?.furnitures);
+    const furnSvg = Array.isArray(furn) ? furn.map((f) => {
+      const x0 = toNum(f.x0), y0 = toNum(f.y0), fw = toNum(f.width), fh = toNum(f.height);
+      if ([x0, y0, fw, fh].some((v) => v === null)) return '';
+      const pts = [[x0, y0], [x0 + fw, y0], [x0 + fw, y0 + fh], [x0, y0 + fh]].map(([x, y]) => T(x, y).map((v) => v.toFixed(1)).join(',')).join(' ');
+      return `<polygon class="furn" points="${pts}"/>`;
+    }).join('') : '';
+    const rp = getRobotPosition(c.cam), cp = getChargerPosition(c.cam);
+    const rs = Math.max(26, ppm * 0.62);
+    const robot = rp ? (() => { const [x, y] = T(rp.x, rp.y); return `<g class="map-robot"><circle cx="${x}" cy="${y}" r="${rs * 0.7}" class="mr-glow"/>${c.config.graphics === 'svg' ? `<circle cx="${x}" cy="${y}" r="${rs / 2}" class="mr-body"/>` : `<image href="${esc(c.config.robot_image || ASSETS.robot_top)}" x="${x - rs / 2}" y="${y - rs * 0.36}" width="${rs}" height="${rs * 0.72}"/>`}</g>`; })() : '';
+    const charger = cp ? (() => { const [x, y] = T(cp.x, cp.y); return `<rect class="map-charger" x="${x - ppm * 0.2}" y="${y - ppm * 0.12}" width="${ppm * 0.4}" height="${ppm * 0.24}" rx="${ppm * 0.05}"/>`; })() : '';
+    const anchors = rooms.filter((rm) => rm.x !== null && rm.visible).map((rm) => { const [x, y] = T(rm.x, rm.y); return `<circle class="anc" data-anc="${rm.id}" cx="${x}" cy="${y}" r="1"/>`; }).join('');
+    overlay = `<svg class="map-overlay" viewBox="0 0 ${dims.w} ${dims.h}" width="${dims.w}" height="${dims.h}">${furnSvg}${charger}${robot}${anchors}</svg>`;
+    if (ui.labels) {
+      labels = `<div class="map-labels">${rooms.filter((rm) => rm.x !== null && rm.visible).map((rm) => {
+        const area = dims.areas?.get(rm.id);
         const sel = ui.selected.has(rm.id);
-        const w = Math.max(5, (rm.name || '').length * 0.62 + 2) * s;
-        return `<g class="rm${sel ? ' sel' : ''}${rm.id === cur ? ' cur' : ''}" data-act="room" data-room="${rm.id}" style="--rc:${roomColor(rm)}">
-          <rect x="${px - w / 2}" y="${py - s * 1.25}" width="${w}" height="${s * 2.5}" rx="${s * 0.5}"/>
-          <text x="${px}" y="${py + s * 0.35}" text-anchor="middle" style="font-size:${s}px">${sel ? `${[...ui.selected].indexOf(rm.id) + 1}. ` : ''}${esc(rm.name || rm.id)}</text></g>`;
-      }).join('')}
-    </svg>`;
+        return `<button class="mlabel${sel ? ' sel' : ''}${rm.id === cur ? ' cur' : ''}" data-act="room" data-room="${rm.id}" data-lbl="${rm.id}" style="--rc:${roomColor(rm)}">
+          ${icon(rm.icon || 'mdi:home-outline')}<b>${sel ? `${[...ui.selected].indexOf(rm.id) + 1}. ` : ''}${esc(rm.name || rm.id)}</b>${area ? `<span>~${fmtNum(area)} m²</span>` : ''}</button>`;
+      }).join('')}</div>`;
+    }
   }
   const hasImg = !!c.cam?.attributes?.entity_picture && !isUnavail(c.cam);
   const tool = (act, ic, title, active = false, extra = '') => `<button class="tool ${active ? 'active' : ''}" data-act="${act}" ${extra} title="${title}">${icon(ic)}</button>`;
@@ -109,7 +123,7 @@ export function renderMap(c, dims) {
     </div>
     <div class="map-col">
       <div class="map-view">
-        ${hasImg ? `<div class="map-stage"><div class="map-3d ${ui.map3d ? 'on' : ''}"><div class="img-slot"></div>${overlay}</div></div>`
+        ${hasImg ? `<div class="map-stage"><div class="map-3d ${ui.map3d ? 'on' : ''}"><div class="img-slot"></div>${overlay}</div></div>${labels}`
           : `<div class="map-empty">${icon('mdi:map-marker-off-outline')}<br>${PL.generic.noMap}<br><small>${esc(c.e.map)}</small></div>`}
         <div class="compass">N</div>
       </div>
@@ -161,7 +175,8 @@ function tankTiles(c) {
   return tiles.map(([kind, key]) => {
     const so = c.st(key);
     const s = tankStatus(so);
-    return `<div class="tank s-${s}">${tankSvg(kind)}<div><span class="tk-name">${esc(PL.tankName[kind])}</span><b class="tk-val">${esc(PL.tank[s])}</b></div></div>`;
+    const img = { clean_water: ASSETS.tank_clean, dirty_water: ASSETS.tank_dirty, dust_bag: ASSETS.tank_bag, detergent: ASSETS.tank_det }[kind];
+    return `<div class="tank s-${s}">${c.config.graphics === 'svg' ? tankSvg(kind) : `<img class="tank-img" src="${img}" alt="">`}<div><span class="tk-name">${esc(PL.tankName[kind])}</span><b class="tk-val">${esc(PL.tank[s])}</b></div></div>`;
   }).join('');
 }
 
@@ -177,7 +192,8 @@ export function renderStation(c, visual, withActions = false) {
     <div class="st-left">
       <div class="st-head"><span class="st-ic">${icon('mdi:home-import-outline')}</span><div><h3>Stacja dokująca</h3><small>${esc(c.config.station_name || 'Dreame PowerDock')}</small></div></div>
       <div class="st-body">
-        <div class="st-art">${stationSvg(visual, { image: c.config.station_image })}</div>
+        <div class="st-art">${c.config.graphics === 'svg' ? stationSvg(visual, { image: c.config.station_image }) : `<div class="st-photo v-${visual}"><img src="${esc(c.config.station_image || ASSETS.station)}" alt="Stacja">
+          <i class="fx-ph fx-wash"></i><i class="fx-ph fx-dry"></i><i class="fx-ph fx-empty"></i><span class="st-badge">${esc(PL.visual[visual])}</span></div>`}</div>
         <div class="proc">${stationProcesses(c, visual)}</div>
       </div>
     </div>
@@ -208,7 +224,7 @@ export function renderRobot(c, visual) {
   <section class="panel robot-panel">
     <div class="rp-hero">
       <div class="rp-name"><b>${esc(c.config.name || 'Mieciu')}</b><small>${esc(c.config.model || 'Dreame X50 Ultra')}</small></div>
-      ${heroRobotSvg(visual, { sparks: visual === 'cleaning', image: c.config.robot_image })}
+      ${c.config.graphics === 'svg' ? heroRobotSvg(visual, { sparks: visual === 'cleaning', image: c.config.robot_image }) : `<div class="rp-photo v-${visual}"><img src="${esc(c.config.robot_image || ASSETS.robot)}" alt=""></div>`}
     </div>
     <div class="rp-info">
       <div class="rp-now">${icon(visual === 'cleaning' ? 'mdi:battery-charging-high' : 'mdi:information-outline')}<div><span>${headLab}</span><b>${esc(headVal)}</b></div></div>
@@ -266,7 +282,8 @@ export function renderRooms(c, canClean) {
   const tiles = list.map((r) => {
     const floor = c.hass.states[roomEntity(c.config, r.id, 'floor_material')];
     const ord = c.hass.states[roomEntity(c.config, r.id, 'order')];
-    const sub = view === 'order' ? `Kolejność ${ord && !isUnavail(ord) ? ord.state : r.order ?? '—'}` : floor && !isUnavail(floor) ? optLabel(floor.state) : `#${r.id}`;
+    const area = c.ui.areas?.get(r.id);
+    const sub = view === 'order' ? `Kolejność ${ord && !isUnavail(ord) ? ord.state : r.order ?? '—'}` : area ? `~${fmtNum(area)} m²` : floor && !isUnavail(floor) ? optLabel(floor.state) : `#${r.id}`;
     return `<button class="room ${sel.has(r.id) ? 'sel' : ''} ${r.id === cur ? 'cur' : ''}" data-act="room" data-room="${r.id}" style="--rc:${roomColor(r)}">
       <span class="r-ic">${icon(r.icon || 'mdi:home-outline')}</span><b>${esc(r.name || `Pokój ${r.id}`)}</b><span class="r-sub">${esc(sub)}</span><i class="r-arrow"></i></button>`;
   }).join('');

@@ -35,10 +35,12 @@ name: Mieciu
 | `entities` | — | ręczne nadpisanie dowolnej encji, np. `battery: sensor.inna` |
 | `map_filter` | `holo` | `none` = mapa w oryginalnych kolorach |
 | `default_tab` | `map` | `map`, `cleaning`, `station`, `service`, `history`, `settings` |
+| `map_rotate` | `auto` | obrót widoku mapy: `auto` (poziomo), `0`, `90`, `180`, `270` — tylko wygląd karty |
 | `map_3d` | `true` | `false` = mapa płaska (2D) na starcie |
 | `robot_image` | — | własny obraz robota (np. `/local/robot.png`) zamiast rysunku SVG |
 | `station_image` | — | własny obraz stacji zamiast rysunku SVG |
 | `station_name` | `Dreame PowerDock` | podpis panelu stacji |
+| `graphics` | `photo` | `svg` = rysunki wektorowe zamiast grafik z mockupu |
 
 Najlepiej na pełnej szerokości (widok *Panel* lub sekcja na całą szerokość).
 
