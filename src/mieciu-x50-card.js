@@ -14,7 +14,7 @@ class MieciuX50Card extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
-    this._ui = { tab: 'map', advTab: 'general', selected: new Set(), map3d: false, holo: true };
+    this._ui = { tab: 'map', advTab: 'cleangenius', roomsView: 'all', selected: new Set(), map3d: true, holo: true, labels: true };
     this._view = { x: 0, y: 0, z: null };
     this._refs = [];
     this._mapImg = null;
@@ -36,6 +36,7 @@ class MieciuX50Card extends HTMLElement {
     this._e = resolveEntities(this._config);
     if (config.map_filter === 'none') this._ui.holo = false;
     if (config.default_tab) this._ui.tab = config.default_tab;
+    if (config.map_3d === false) this._ui.map3d = false;
     this._refs = [];
     this._schedule();
   }
@@ -88,32 +89,40 @@ class MieciuX50Card extends HTMLElement {
     const canClean = Commands.canCleanSegments(hass);
     const tab = this._ui.tab;
     let body = '';
+    const page = (inner) => `<div class="page">${renderNav(tab)}<div class="main">${renderErrorBanner(c)}${inner}</div></div>`;
     if (!c.vac) {
-      body = `<section class="panel"><b>Nie znaleziono encji ${this._config.entity}</b></section>`;
+      body = page(`<section class="panel"><b>Nie znaleziono encji ${this._config.entity}</b></section>`);
     } else if (tab === 'map') {
-      body = `
-        <div class="row-a">${renderMap(c, this._mapDims)}${renderStation(c, visual)}</div>
-        <div class="row-b">${renderRobot(c, visual)}${renderModes(c)}</div>
-        <div class="row-c">${renderRooms(c, canClean)}${renderAdvanced(c)}${renderService(c)}${renderHistory(c, 4)}</div>`;
+      body = `${renderErrorBanner(c)}
+        <div class="row1">${renderNav(tab)}${renderMap(c, this._mapDims)}${renderStation(c, visual)}</div>
+        <div class="row2">${renderRobot(c, visual)}${renderModes(c)}</div>
+        <div class="row3">${renderRooms(c, canClean)}${renderAdvanced(c)}${renderService(c)}${renderHistory(c, 4)}</div>`;
     } else if (tab === 'cleaning') {
-      body = `<div class="row-b">${renderRobot(c, visual)}${renderModes(c)}</div>
-        <div class="row-b">${renderRooms(c, canClean)}${renderAdvanced(c)}</div>`;
+      body = page(`<div class="row2">${renderRobot(c, visual)}${renderModes(c)}</div>
+        <div class="row-wide" style="grid-template-columns:minmax(0,1.3fr) minmax(0,1fr)">${renderRooms(c, canClean)}${renderAdvanced(c)}</div>
+        ${renderRoomDetails(c)}`);
     } else if (tab === 'station') {
-      body = `${renderStation(c, visual, true)}<div class="row-b">${(() => { const s = this._ui.advTab; this._ui.advTab = 'station'; const h = renderAdvanced(c); this._ui.advTab = s; return h; })()}${renderRobot(c, visual)}</div>`;
-    } else if (tab === 'rooms') {
-      body = `<div class="row-a">${renderMap(c, this._mapDims)}${renderRooms(c, canClean, true)}</div>${renderRoomDetails(c)}`;
+      body = page(`${renderStation(c, visual, true)}${renderAdvanced(c, 'station')}`);
     } else if (tab === 'service') {
-      body = renderService(c, true);
+      body = page(renderService(c, true));
     } else if (tab === 'history') {
-      body = renderHistory(c, 30);
-    } else if (tab === 'settings') {
-      body = renderSettings(c);
+      body = page(renderHistory(c, 30));
+    } else {
+      body = page(renderSettings(c));
     }
 
     this.shadowRoot.innerHTML = `<style>${STYLES}</style>
+      <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+        <filter id="mx-holo" color-interpolation-filters="sRGB">
+          <feColorMatrix type="matrix" values="-1 0 0 0 1  0 -1 0 0 1  0 0 -1 0 1  0 0 0 1 0"/>
+          <feColorMatrix type="hueRotate" values="180"/>
+          <feColorMatrix type="saturate" values="2.8"/>
+          <feComponentTransfer><feFuncR type="linear" slope="1.35"/><feFuncG type="linear" slope="1.35"/><feFuncB type="linear" slope="1.5"/></feComponentTransfer>
+          <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  1.6 1.6 1.6 0 -0.12"/>
+        </filter></defs></svg>
       <ha-card class="root">
         ${renderTop(c, visual)}
-        <div class="layout">${renderNav(tab)}<div class="main">${renderErrorBanner(c)}${body}</div></div>
+        ${body}
         ${this._toastMsg ? `<div class="toast">${this._toastMsg.replace(/</g, '&lt;')}</div>` : ''}
       </ha-card>`;
 
@@ -155,7 +164,7 @@ class MieciuX50Card extends HTMLElement {
     const { w, h } = this._mapDims;
     if (this._view.z === null) {
       const vw = view.clientWidth || 600, vh = view.clientHeight || 340;
-      this._view = { x: 0, y: 0, z: Math.min(vw / w, vh / h) * 0.95 };
+      this._view = { x: 0, y: 0, z: Math.min(vw / w, vh / h) * (this._ui.map3d ? 1.25 : 0.95) };
     }
     const { x, y, z } = this._view;
     stage.style.width = `${w}px`;
@@ -249,7 +258,18 @@ class MieciuX50Card extends HTMLElement {
           this._call(() => Commands.press(hass, el.dataset.entity), 'Wysłano');
           break;
         }
-        case 'map3d': this._ui.map3d = !this._ui.map3d; this._schedule(); break;
+        case 'map3d': this._ui.map3d = true; this._view.z = null; this._schedule(); break;
+        case 'map2d': this._ui.map3d = false; this._view.z = null; this._schedule(); break;
+        case 'labels': this._ui.labels = !this._ui.labels; this._schedule(); break;
+        case 'roomsview': this._ui.roomsView = el.dataset.view; this._schedule(); break;
+        case 'genius': {
+          const on = el.dataset.on === '1';
+          const so = hass.states[el.dataset.entity];
+          const options = Array.isArray(so?.attributes?.options) ? so.attributes.options : [];
+          const target = on ? 'off' : (options.find((o) => o !== 'off') || null);
+          if (target) this._call(() => Commands.selectOption(hass, el.dataset.entity, target));
+          break;
+        }
         case 'holo': this._ui.holo = !this._ui.holo; this._schedule(); break;
         case 'zoom': this._zoom(Number(el.dataset.dir) > 0 ? 1.25 : 0.8); break;
         case 'fit': this._view.z = null; this._applyView(); break;

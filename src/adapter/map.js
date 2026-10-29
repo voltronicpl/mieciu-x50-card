@@ -42,6 +42,7 @@ export function getRooms(vacState, mapState) {
       byId.set(Number(r.room_id), {
         id: Number(r.room_id), name: r.name, icon: r.icon, order: toNum(r.order),
         x: toNum(r.x), y: toNum(r.y), floor: r.floor_material, visible: r.visibility !== 'Hidden',
+        color: toNum(r.color_index),
       });
     }
   }

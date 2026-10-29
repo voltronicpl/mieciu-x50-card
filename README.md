@@ -34,7 +34,11 @@ name: Mieciu
 | `prefix` | object_id odkurzacza | prefiks do auto‑wykrywania encji |
 | `entities` | — | ręczne nadpisanie dowolnej encji, np. `battery: sensor.inna` |
 | `map_filter` | `holo` | `none` = mapa w oryginalnych kolorach |
-| `default_tab` | `map` | `map`, `cleaning`, `station`, `rooms`, `service`, `history`, `settings` |
+| `default_tab` | `map` | `map`, `cleaning`, `station`, `service`, `history`, `settings` |
+| `map_3d` | `true` | `false` = mapa płaska (2D) na starcie |
+| `robot_image` | — | własny obraz robota (np. `/local/robot.png`) zamiast rysunku SVG |
+| `station_image` | — | własny obraz stacji zamiast rysunku SVG |
+| `station_name` | `Dreame PowerDock` | podpis panelu stacji |
 
 Najlepiej na pełnej szerokości (widok *Panel* lub sekcja na całą szerokość).
 
