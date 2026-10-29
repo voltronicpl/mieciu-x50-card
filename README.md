@@ -9,7 +9,7 @@ Działa na encjach integracji **[Tasshack/dreame-vacuum](https://github.com/Tass
 
 ### HACS (repozytorium niestandardowe)
 1. HACS → menu ⋮ → *Niestandardowe repozytoria*.
-2. URL tego repo, kategoria **Dashboard** (Lovelace).
+2. URL: `https://github.com/voltronicpl/mieciu-x50-card`, kategoria **Dashboard**.
 3. Zainstaluj **Mieciu X50 Card**, przeładuj przeglądarkę (Ctrl+F5).
 
 ### Ręcznie

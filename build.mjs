@@ -19,7 +19,7 @@ const order = [
 ];
 
 const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
-let out = `/*! Mieciu X50 Card v${pkg.version} | MIT | https://github.com/ — autorska karta Lovelace */\n(() => {\n'use strict';\n`;
+let out = `/*! Mieciu X50 Card v${pkg.version} | MIT | https://github.com/voltronicpl/mieciu-x50-card — autorska karta Lovelace */\n(() => {\n'use strict';\n`;
 for (const f of order) {
   const src = readFileSync(f, 'utf8')
     .replace(/^import[\s\S]*?from\s+['"][^'"]+['"];?\s*$/gm, '')

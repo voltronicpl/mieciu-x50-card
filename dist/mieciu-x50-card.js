@@ -1,4 +1,4 @@
-/*! Mieciu X50 Card v0.1.0 | MIT | https://github.com/ — autorska karta Lovelace */
+/*! Mieciu X50 Card v0.1.0 | MIT | https://github.com/voltronicpl/mieciu-x50-card — autorska karta Lovelace */
 (() => {
 'use strict';
 
