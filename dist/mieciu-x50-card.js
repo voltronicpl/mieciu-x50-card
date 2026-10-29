@@ -1,4 +1,4 @@
-/*! Mieciu X50 Card v0.1.0 | MIT | https://github.com/voltronicpl/mieciu-x50-card — autorska karta Lovelace */
+/*! Mieciu X50 Card v1.0.0 | MIT | https://github.com/voltronicpl/mieciu-x50-card — autorska karta Lovelace */
 (() => {
 'use strict';
 
@@ -1657,7 +1657,7 @@ function renderRoomDetails(c) {
 
 
 
-const VERSION = '0.1.0';
+const VERSION = '1.0.0';
 
 // Minimalny „morph”: aktualizuje istniejący DOM do nowego HTML bez jego
 // przebudowy. Zachowuje obrazki, canvas mapy, fokus i wysokość karty.

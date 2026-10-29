@@ -3,7 +3,7 @@
 Autorska, darmowa karta Lovelace dla **Dreame X50 Ultra** w Home Assistant — styl sci‑fi holograficzny.
 Działa na encjach integracji **[Tasshack/dreame-vacuum](https://github.com/Tasshack/dreame-vacuum)** (integracja pozostaje nienaruszona).
 
-> Status: **v0.1.0** — pierwsze wydanie. Sprawdź na swoim HA zanim zaufasz każdej funkcji.
+> Status: **v1.0.0**. Nowe wersje publikują się automatycznie po zmianie numeru w `package.json`.
 
 ## Instalacja
 

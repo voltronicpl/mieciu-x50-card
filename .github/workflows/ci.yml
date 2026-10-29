@@ -2,7 +2,6 @@ name: CI
 on:
   push:
     branches: [main]
-    tags: ['v*']
   pull_request:
 jobs:
   build:
@@ -11,14 +10,29 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - run: npm test
       - run: npm run build
       - run: git diff --exit-code dist/ || (echo "dist/ nieaktualny — uruchom npm run build" && exit 1)
-      - name: Release (tylko tagi v*)
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Wersja z package.json
+        id: ver
+        run: |
+          V="v$(node -p "require('./package.json').version")"
+          echo "tag=$V" >> "$GITHUB_OUTPUT"
+          if git rev-parse "$V" >/dev/null 2>&1; then echo "exists=1" >> "$GITHUB_OUTPUT"; else echo "exists=0" >> "$GITHUB_OUTPUT"; fi
+      - name: Notatki z CHANGELOG
+        if: github.event_name == 'push' && steps.ver.outputs.exists == '0'
+        run: |
+          V="${{ steps.ver.outputs.tag }}"; V="${V#v}"
+          awk -v v="$V" '$0 ~ "^## \\[" v "\\]" {f=1; next} /^## \[/ {f=0} f' CHANGELOG.md > notes.md
+      - name: Release (automatycznie przy nowej wersji)
+        if: github.event_name == 'push' && steps.ver.outputs.exists == '0'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          name: Mieciu X50 Card ${{ steps.ver.outputs.tag }}
+          body_path: notes.md
+          target_commitish: ${{ github.sha }}
           files: dist/mieciu-x50-card.js
-          generate_release_notes: true

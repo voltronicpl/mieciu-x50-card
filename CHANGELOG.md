@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.0] — 2026-10-29
+### Zmienione
+- Wygląd 1:1 z mockupem: ramki HUD, ikony, pierścienie serwisu, przełączniki CleanGenius.
+- Mapa holo 3D: warstwy głębi, poświata, skaner, meble z danych integracji.
+- Kształty i metraż pokoi liczone z granic pokoi integracji (nie z kolorów obrazka).
+- Robot i stacja na mapie jako stojące obiekty 3D.
+- Czytelne etykiety pokoi w 2D.
+- Przycisk Start podświetlony tylko podczas sprzątania.
+
+### Naprawione
+- Kliknięcie w mapę nie przewija już strony do góry (karta aktualizuje tylko zmienione elementy).
+
 ## [0.1.0] — 2026-10-29
 ### Dodane
 - Układ 1:1 z zatwierdzonym mockupem: nagłówek telemetrii, mapa 3D z neonowym filtrem, panel stacji z listą procesów i kaflami „Zbiorniki i pojemniki”, rząd robota z dużymi przyciskami, kafle trybu/ssania/mopa z ikonami, pomieszczenia (Wszystkie/Kolejność), ustawienia zaawansowane w zakładkach (Ogólne, Dywany, CleanGenius, AI i przeszkody, Stacja), 6 pierścieni serwisu, historia.
