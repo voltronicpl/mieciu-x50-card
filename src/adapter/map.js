@@ -60,6 +60,40 @@ export function getRooms(vacState, mapState) {
   return [...byId.values()].sort((a, b) => (a.order ?? a.id) - (b.order ?? b.id));
 }
 
+// Odwrotność transformacji: piksele obrazu -> współrzędne robota (mm).
+export function invertTransform(T) {
+  if (!T) return null;
+  const [ox, oy] = T(0, 0), [ax, ay] = T(1, 0), [bx, by] = T(0, 1);
+  const a = ax - ox, c = bx - ox, b = ay - oy, d = by - oy;
+  const det = a * d - b * c;
+  if (!det) return null;
+  return (px, py) => {
+    const dx = px - ox, dy = py - oy;
+    return [Math.round((d * dx - c * dy) / det), Math.round((-b * dx + a * dy) / det)];
+  };
+}
+
+// Istniejące strefy zakazane / bez mopa / ściany z atrybutów kamery,
+// sprowadzone do [x0,y0,x1,y1] (prostokąty) i [x0,y0,x1,y1] (linie).
+function rects(list) {
+  if (!Array.isArray(list)) return [];
+  return list.map((a) => {
+    const xs = [a.x0, a.x1, a.x2, a.x3].map(toNum).filter((v) => v !== null);
+    const ys = [a.y0, a.y1, a.y2, a.y3].map(toNum).filter((v) => v !== null);
+    if (xs.length < 2 || ys.length < 2) return null;
+    return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)].map(Math.round);
+  }).filter(Boolean);
+}
+export function getRestricted(mapState) {
+  const at = mapState?.attributes || {};
+  const walls = (pyParse(at.virtual_walls) || []);
+  return {
+    zones: rects(pyParse(at.no_go_areas)),
+    no_mops: rects(pyParse(at.no_mopping_areas)),
+    walls: Array.isArray(walls) ? walls.map((w) => [w.x0, w.y0, w.x1, w.y1].map((v) => Math.round(toNum(v)))).filter((w) => w.every(Number.isFinite)) : [],
+  };
+}
+
 export function getRobotPosition(mapState) {
   return parsePosition(mapState?.attributes?.vacuum_position);
 }

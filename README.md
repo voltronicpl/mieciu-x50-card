@@ -54,9 +54,17 @@ Najlepiej na pełnej szerokości (widok *Panel* lub sekcja na całą szerokość
 - Akcje stacji i resety eksploatacji — zawsze z oknem potwierdzenia.
 - Serwis, historia z miniaturami, ustawienia per pokój (podgląd), wszystkie przełączniki.
 
-## Czego jeszcze NIE ma
+## Tryby mapy (od v1.2.0)
 
-Strefy, punkty, strefy zakazane, edycja mapy, zmiana ustawień per pokój — przyciski są widoczne, ale wyłączone do czasu audytu API.
+Przyciski pod mapą: **Pokój · Strefa · Punkt · Zakazana · Edycja mapy**. Rysowanie działa w widoku 2D (karta sama przełącza).
+
+- **Strefa** — przeciągnij po mapie (max 4 strefy), wybierz 1×/2×/3×, *Sprzątaj strefy* → `dreame_vacuum.vacuum_clean_zone`. Lista stref też w *Pomieszczenia → Strefy*.
+- **Punkt** — kliknij w mapę → *Jedź tutaj* (`vacuum_goto`) albo *Sprzątaj punkt* (`vacuum_clean_spot`).
+- **Zakazana** — zakaz wjazdu / bez mopa / wirtualna ściana. Rysujesz, klikasz istniejącą żeby usunąć, *Zapisz* wysyła całość (`vacuum_set_restricted_zone` nadpisuje wszystkie strefy mapy) — z potwierdzeniem.
+- **Edycja mapy** — zaznacz pokoje etykietami: *Zmień nazwę* (`vacuum_rename_segment`), *Połącz (2)* (`vacuum_merge_segments`), *Podziel* — narysuj linię (`vacuum_split_segments`). Połącz/podziel z potwierdzeniem.
+- **Ustawienia per pokój** (zakładka Sprzątanie) — komórki to listy wyboru, zmiana zapisuje się od razu (`select.select_option`).
+
+Jeśli integracja nie ma danej usługi, przycisk jest wyłączony z podpowiedzią.
 
 ## Budowanie
 

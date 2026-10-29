@@ -116,3 +116,21 @@ test('historia: parsowanie i sortowanie', () => {
   assert.equal(h[0].pic, '/api/p?index=1&v=200');
   assert.equal(h[1].completed, true);
 });
+
+test('invertTransform: odwraca kalibrację', async () => {
+  const { invertTransform } = await import('../src/adapter/map.js');
+  const T = buildTransform([{ vacuum: { x: 0, y: 0 }, map: { x: 100, y: 200 } }, { vacuum: { x: 1000, y: 0 }, map: { x: 120, y: 200 } }, { vacuum: { x: 0, y: 1000 }, map: { x: 100, y: 180 } }]);
+  const inv = invertTransform(T);
+  const [px, py] = T(1234, -567);
+  assert.deepEqual(inv(px, py), [1234, -567]);
+});
+
+test('getRestricted: prostokąty i ściany z atrybutów kamery', async () => {
+  const { getRestricted } = await import('../src/adapter/map.js');
+  const r = getRestricted({ attributes: {
+    no_go_areas: [{ x0: 10, y0: 20, x1: 300, y1: 20, x2: 300, y2: 400, x3: 10, y3: 400 }],
+    no_mopping_areas: [],
+    virtual_walls: [{ x0: 1, y0: 2, x1: 3, y1: 4 }],
+  } });
+  assert.deepEqual(r, { zones: [[10, 20, 300, 400]], no_mops: [], walls: [[1, 2, 3, 4]] });
+});

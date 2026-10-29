@@ -2,7 +2,7 @@ import { STYLES } from './styles.js';
 import { resolveEntities, discoverSwitches } from './adapter/entities.js';
 import { Commands } from './adapter/commands.js';
 import { deriveRobotVisualState } from './state/visual-state.js';
-import { getRooms, buildTransform } from './adapter/map.js';
+import { getRooms, buildTransform, invertTransform, getRestricted } from './adapter/map.js';
 import { renderNeonMap } from './adapter/map-render.js';
 import {
   makeCtx, renderTop, renderErrorBanner, renderNav, renderMap, renderStation, renderRobot, renderModes,
@@ -48,7 +48,7 @@ class MieciuX50Card extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
-    this._ui = { tab: 'map', advTab: 'cleangenius', roomsView: 'all', selected: new Set(), map3d: true, holo: true, labels: true };
+    this._ui = { tab: 'map', advTab: 'cleangenius', roomsView: 'all', selected: new Set(), map3d: true, holo: true, labels: true, mode: 'room', zones: [], point: null, repeats: 1, nogo: null, nogoKind: 'zones', nogoDirty: false, draft: null, splitArm: false, splitLine: null };
     this._view = { x: 0, y: 0, z: null };
     this._refs = [];
     this._mapImg = null;
@@ -310,6 +310,55 @@ class MieciuX50Card extends HTMLElement {
     this._applyView();
   }
 
+  // czy pociągnięcie po mapie rysuje (zamiast przesuwać)
+  _drawing() {
+    const m = this._ui.mode;
+    return m === 'zone' || m === 'nogo' || m === 'point' || (m === 'edit' && this._ui.splitArm);
+  }
+
+  // punkt ekranu -> współrzędne robota (mm); mapa jest wtedy w 2D
+  _toMm(ev) {
+    const svg = this.shadowRoot.querySelector('.map-overlay');
+    const c = this._hass?.states[this._e.map];
+    const inv = invertTransform(buildTransform(c?.attributes?.calibration_points));
+    if (!svg || !inv || !svg.getScreenCTM()) return null;
+    const pt = svg.createSVGPoint();
+    pt.x = ev.clientX; pt.y = ev.clientY;
+    const p = pt.matrixTransform(svg.getScreenCTM().inverse());
+    return inv(p.x, p.y);
+  }
+
+  _setMode(mode) {
+    const ui = this._ui;
+    ui.mode = ui.mode === mode && mode !== 'room' ? 'room' : mode;
+    ui.draft = null; ui.splitArm = false; ui.splitLine = null;
+    if (ui.mode === 'nogo' && !ui.nogo) { ui.nogo = getRestricted(this._hass.states[this._e.map]); ui.nogoDirty = false; }
+    if (ui.mode !== 'room' && ui.mode !== 'edit' && ui.map3d) { ui.map3d = false; this._view.z = null; }
+    if (ui.mode !== 'edit' && ui.mode !== 'room') ui.selected.clear();
+    this._schedule();
+  }
+
+  _finishDraft() {
+    const ui = this._ui, d = ui.draft;
+    ui.draft = null;
+    if (!d) return;
+    const [x0, y0, x1, y1] = d.r;
+    const len = Math.hypot(x1 - x0, y1 - y0);
+    if (d.line) {
+      if (len < 300) return this._schedule();
+      if (ui.mode === 'edit') ui.splitLine = d.r;
+      else { ui.nogo.walls.push(d.r); ui.nogoDirty = true; }
+    } else {
+      const r = [Math.min(x0, x1), Math.min(y0, y1), Math.max(x0, x1), Math.max(y0, y1)];
+      if (r[2] - r[0] < 300 || r[3] - r[1] < 300) { this._toast('Za mała strefa (min. 30 cm)'); return; }
+      if (ui.mode === 'zone') {
+        if (ui.zones.length >= 4) { this._toast('Maksymalnie 4 strefy'); return; }
+        ui.zones.push(r);
+      } else { ui.nogo[ui.nogoKind].push(r); ui.nogoDirty = true; }
+    }
+    this._schedule();
+  }
+
   _bind() {
     if (this._bound) return;
     this._bound = true;
@@ -319,18 +368,38 @@ class MieciuX50Card extends HTMLElement {
     root.addEventListener('pointerdown', (ev) => {
       const view = ev.target.closest?.('.map-view');
       if (!view || ev.button !== 0) return;
+      if (this._drawing() && !this._ui.map3d) {
+        const p = this._toMm(ev);
+        if (!p) return;
+        const line = (this._ui.mode === 'nogo' && this._ui.nogoKind === 'walls') || this._ui.mode === 'edit';
+        drag = { draw: true, sx: ev.clientX, sy: ev.clientY, p, moved: false, view, line };
+        return;
+      }
       drag = { sx: ev.clientX, sy: ev.clientY, x: this._view.x, y: this._view.y, moved: false, view };
     });
     root.addEventListener('pointermove', (ev) => {
       if (!drag) return;
       const dx = ev.clientX - drag.sx, dy = ev.clientY - drag.sy;
       if (!drag.moved && Math.hypot(dx, dy) < 6) return;
+      if (drag.draw) {
+        if (this._ui.mode === 'point') return;
+        if (!drag.moved) { drag.moved = true; drag.view.setPointerCapture?.(ev.pointerId); }
+        const q = this._toMm(ev);
+        if (q) { this._ui.draft = { line: drag.line, r: [drag.p[0], drag.p[1], q[0], q[1]] }; this._schedule(); }
+        return;
+      }
       if (!drag.moved) { drag.moved = true; drag.view.classList.add('dragging'); drag.view.setPointerCapture?.(ev.pointerId); }
       this._view.x = drag.x + dx; this._view.y = drag.y + dy;
       this._applyView();
     });
     const end = () => {
       if (!drag) return;
+      if (drag.draw) {
+        const d = drag; drag = null;
+        if (d.moved) { this._dragMoved = true; setTimeout(() => { this._dragMoved = false; }, 0); this._finishDraft(); }
+        else if (this._ui.mode === 'point') { this._ui.point = d.p; this._schedule(); }
+        return;
+      }
       drag.view.classList.remove('dragging');
       this._dragMoved = drag.moved;
       drag = null;
@@ -390,7 +459,7 @@ class MieciuX50Card extends HTMLElement {
           this._call(() => Commands.press(hass, el.dataset.entity), 'Wysłano');
           break;
         }
-        case 'map3d': this._ui.map3d = true; this._view.z = null; this._schedule(); break;
+        case 'map3d': if (this._drawing()) { this._toast('Rysowanie działa w 2D'); break; } this._ui.map3d = true; this._view.z = null; this._schedule(); break;
         case 'map2d': this._ui.map3d = false; this._view.z = null; this._schedule(); break;
         case 'labels': this._ui.labels = !this._ui.labels; this._schedule(); break;
         case 'roomsview': this._ui.roomsView = el.dataset.view; this._schedule(); break;
@@ -400,6 +469,53 @@ class MieciuX50Card extends HTMLElement {
           const options = Array.isArray(so?.attributes?.options) ? so.attributes.options : [];
           const target = on ? 'off' : (options.find((o) => o !== 'off') || null);
           if (target) this._call(() => Commands.selectOption(hass, el.dataset.entity, target));
+          break;
+        }
+        case 'mode': if (this._ui.tab !== 'map') this._ui.tab = 'map'; this._setMode(el.dataset.mode); break;
+        case 'repeats': this._ui.repeats = Number(el.dataset.n) || 1; this._schedule(); break;
+        case 'zone-del': this._ui.zones.splice(Number(el.dataset.i), 1); this._schedule(); break;
+        case 'zone-clear': this._ui.zones = []; this._schedule(); break;
+        case 'zone-clean': {
+          const z = this._ui.zones.map((r) => r.slice());
+          if (!z.length) return;
+          this._call(() => Commands.cleanZones(hass, vac, z, this._ui.repeats), `Sprzątanie ${z.length} stref`);
+          break;
+        }
+        case 'goto': if (this._ui.point) this._call(() => Commands.goto(hass, vac, this._ui.point[0], this._ui.point[1]), 'Jadę do punktu'); break;
+        case 'spot': if (this._ui.point) this._call(() => Commands.cleanSpot(hass, vac, [this._ui.point], this._ui.repeats), 'Sprzątanie punktu'); break;
+        case 'nogo-kind': this._ui.nogoKind = el.dataset.kind; this._schedule(); break;
+        case 'nogo-del': {
+          const k = el.dataset.kind;
+          if (!this._ui.nogo?.[k]) return;
+          this._ui.nogo[k].splice(Number(el.dataset.i), 1); this._ui.nogoDirty = true; this._schedule(); break;
+        }
+        case 'nogo-reset': this._ui.nogo = getRestricted(hass.states[this._e.map]); this._ui.nogoDirty = false; this._schedule(); break;
+        case 'nogo-save': {
+          const r = this._ui.nogo;
+          if (!window.confirm(`Zapisać strefy w robocie?\nZakaz wjazdu: ${r.zones.length}, bez mopa: ${r.no_mops.length}, ściany: ${r.walls.length}\n(nadpisuje wszystkie obecne strefy na tej mapie)`)) return;
+          this._call(async () => { await Commands.setRestricted(hass, vac, r); this._ui.nogoDirty = false; this._ui.nogo = null; this._ui.mode = 'room'; }, 'Strefy zapisane');
+          break;
+        }
+        case 'seg-rename': {
+          const id = Number(el.dataset.room || [...this._ui.selected][0]);
+          const c = makeCtx(hass, this._config, this._e, this._ui);
+          const room = getRooms(c.vac, c.cam).find((r) => r.id === id);
+          const name = window.prompt(`Nowa nazwa pokoju #${id}`, room?.name || '');
+          if (name && name.trim() && name.trim() !== room?.name) this._call(() => Commands.renameSegment(hass, vac, id, name.trim()), 'Zmieniono nazwę');
+          break;
+        }
+        case 'seg-merge': {
+          const ids = [...this._ui.selected];
+          if (ids.length !== 2 || !window.confirm(`Połączyć pokoje #${ids[0]} i #${ids[1]}?\nTej operacji nie da się cofnąć z karty.`)) return;
+          this._call(async () => { await Commands.mergeSegments(hass, vac, ids); this._ui.selected.clear(); }, 'Połączono');
+          break;
+        }
+        case 'seg-split-arm': this._ui.splitArm = !this._ui.splitArm; this._ui.splitLine = null; if (this._ui.splitArm && this._ui.map3d) { this._ui.map3d = false; this._view.z = null; } this._schedule(); break;
+        case 'seg-split': {
+          const id = [...this._ui.selected][0];
+          const line = this._ui.splitLine;
+          if (!id || !line || !window.confirm(`Podzielić pokój #${id} narysowaną linią?\nTej operacji nie da się cofnąć z karty.`)) return;
+          this._call(async () => { await Commands.splitSegment(hass, vac, id, line); this._ui.splitArm = false; this._ui.splitLine = null; this._ui.selected.clear(); }, 'Podzielono');
           break;
         }
         case 'holo': this._ui.holo = !this._ui.holo; this._schedule(); break;

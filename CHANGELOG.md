@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.0] — niewydane
+### Dodane
+- Tryb **Strefa**: rysowanie do 4 stref na mapie, powtórzenia 1–3×, sprzątanie stref; lista stref w Pomieszczenia → Strefy.
+- Tryb **Punkt**: „Jedź tutaj” i „Sprzątaj punkt”.
+- Tryb **Zakazana**: zakaz wjazdu, bez mopa, wirtualne ściany — rysowanie, usuwanie, zapis z potwierdzeniem.
+- Tryb **Edycja mapy**: zmiana nazwy, łączenie i dzielenie pokoi.
+- Ustawienia per pokój edytowalne (wcześniej tylko podgląd).
+
 ## [1.1.0] — 2026-10-29
 ### Dodane
 - Zakładka Serwis: ilustracje części 3D (szczotka główna, boczna, filtr, czujniki, jony srebra, koła, środek do kamienia), kolor wg stanu, status OK / Wkrótce wymiana / Wymień / Wyczyść.

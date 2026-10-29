@@ -427,4 +427,28 @@ ha-icon { --mdc-icon-size: 20px; display: inline-flex; width: var(--mdc-icon-siz
 .rp-photo.k-idle .rp-floor { position:absolute; left: 12%; right: 12%; bottom: -2px; height: 26%; border-radius: 50%; background: radial-gradient(closest-side, rgba(63,216,255,.55), rgba(31,125,255,.18) 60%, transparent); }
 .rp-photo.v-error img, .rp-photo.v-unavailable img { filter: grayscale(.85) brightness(.7); }
 .rp-photo.v-paused img { filter: drop-shadow(0 0 8px rgba(255,181,71,.45)); }
+
+/* --- tryby mapy: strefy / punkt / zakazane / edycja --- */
+.map-overlay .hit { fill: transparent; pointer-events: none; }
+.map-view.drawing .map-overlay .hit { pointer-events: all; cursor: crosshair; }
+.map-view.drawing .map-labels .mlabel { pointer-events: none; opacity: .55; }
+.map-view.drawing { cursor: crosshair; }
+.sh { vector-effect: non-scaling-stroke; }
+.sh.zone { fill: rgba(63,216,255,.18); stroke: var(--mx-cyan); cursor: pointer; filter: drop-shadow(0 0 6px rgba(63,216,255,.7)); }
+.sh.nogo { fill: rgba(255,64,96,.2); stroke: #ff4060; cursor: pointer; }
+.sh.nomop { fill: rgba(255,190,60,.18); stroke: #ffbe3c; cursor: pointer; }
+.sh.wall { stroke: #ff4060; stroke-linecap: round; cursor: pointer; }
+.sh.draft { fill: rgba(255,255,255,.12); stroke: #fff; stroke-dasharray: 8 6; }
+.sh.split { stroke: #fff; stroke-dasharray: 10 6; }
+.sh.pt { fill: var(--mx-cyan); } .sh.pt-ring { fill: rgba(63,216,255,.15); stroke: var(--mx-cyan); }
+.sh-txt { fill: #fff; font-weight: 700; text-anchor: middle; dominant-baseline: central; pointer-events: none; text-shadow: 0 0 4px #000; }
+.mode-bar { display:flex; flex-wrap: wrap; align-items:center; justify-content: space-between; gap:10px; margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: rgba(6,16,36,.7); box-shadow: 0 0 0 1px var(--mx-line); }
+.mb-hint { display:flex; align-items:center; gap:8px; font-size: 13px; color: var(--mx-dim); } .mb-hint ha-icon { --mdc-icon-size: 18px; color: var(--mx-cyan); }
+.mb-act { display:flex; flex-wrap: wrap; gap: 8px; align-items:center; }
+.mb-act .seg ha-icon { --mdc-icon-size: 16px; }
+.zone-list { display:flex; flex-direction:column; gap:8px; }
+.zone-item { display:flex; align-items:center; gap:12px; padding: 8px 12px; border-radius: 10px; box-shadow: 0 0 0 1px var(--mx-line); }
+.zone-item span { color: var(--mx-dim); font-size: 13px; flex: 1; }
+.rtable select { background: rgba(6,16,36,.9); color: inherit; border: 1px solid var(--mx-line); border-radius: 6px; padding: 3px 4px; font: inherit; font-size: 12px; }
+.rtable .link ha-icon { --mdc-icon-size: 14px; }
 `;

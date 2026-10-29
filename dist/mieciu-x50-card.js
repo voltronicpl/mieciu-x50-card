@@ -320,10 +320,24 @@ function exists(hass, entityId) {
 //  - vacuum.start / vacuum.pause / vacuum.return_to_base (standard HA)
 //  - dreame_vacuum.vacuum_clean_segment {segments: [id,...]} (docs Tasshack)
 //  - select.select_option, switch.toggle, button.press (standard HA)
-// Strefy, punkty i edycja mapy celowo NIE są tu zaimplementowane (v0.2+).
+//  - dreame_vacuum.vacuum_clean_zone / vacuum_clean_spot / vacuum_goto
+//  - dreame_vacuum.vacuum_set_restricted_zone (nadpisuje WSZYSTKIE strefy -> zawsze pełna lista)
+//  - dreame_vacuum.vacuum_rename_segment / vacuum_merge_segments / vacuum_split_segments
+// (zweryfikowane w services.yaml / vacuum.py integracji Tasshack)
 
+
+const dv = (hass, svc, vac, data) => hass.callService('dreame_vacuum', svc, { entity_id: vac, ...data });
 
 const Commands = {
+  can: (hass, svc) => hasService(hass, 'dreame_vacuum', svc),
+  cleanZones: (hass, vac, zones, repeats = 1) => dv(hass, 'vacuum_clean_zone', vac, { zone: zones, repeats: Number(repeats) }),
+  cleanSpot: (hass, vac, points, repeats = 1) => dv(hass, 'vacuum_clean_spot', vac, { points, repeats: Number(repeats) }),
+  goto: (hass, vac, x, y) => dv(hass, 'vacuum_goto', vac, { x, y }),
+  setRestricted: (hass, vac, r) => dv(hass, 'vacuum_set_restricted_zone', vac, { walls: r.walls, zones: r.zones, no_mops: r.no_mops }),
+  renameSegment: (hass, vac, id, name) => dv(hass, 'vacuum_rename_segment', vac, { segment_id: Number(id), segment_name: name }),
+  mergeSegments: (hass, vac, ids) => dv(hass, 'vacuum_merge_segments', vac, { segments: ids.map(Number) }),
+  splitSegment: (hass, vac, id, line) => dv(hass, 'vacuum_split_segments', vac, { segment: Number(id), line }),
+
   start: (hass, vac) => hass.callService('vacuum', 'start', { entity_id: vac }),
   pause: (hass, vac) => hass.callService('vacuum', 'pause', { entity_id: vac }),
   dock: (hass, vac) => hass.callService('vacuum', 'return_to_base', { entity_id: vac }),
@@ -398,6 +412,40 @@ function getRooms(vacState, mapState) {
     }
   }
   return [...byId.values()].sort((a, b) => (a.order ?? a.id) - (b.order ?? b.id));
+}
+
+// Odwrotność transformacji: piksele obrazu -> współrzędne robota (mm).
+function invertTransform(T) {
+  if (!T) return null;
+  const [ox, oy] = T(0, 0), [ax, ay] = T(1, 0), [bx, by] = T(0, 1);
+  const a = ax - ox, c = bx - ox, b = ay - oy, d = by - oy;
+  const det = a * d - b * c;
+  if (!det) return null;
+  return (px, py) => {
+    const dx = px - ox, dy = py - oy;
+    return [Math.round((d * dx - c * dy) / det), Math.round((-b * dx + a * dy) / det)];
+  };
+}
+
+// Istniejące strefy zakazane / bez mopa / ściany z atrybutów kamery,
+// sprowadzone do [x0,y0,x1,y1] (prostokąty) i [x0,y0,x1,y1] (linie).
+function rects(list) {
+  if (!Array.isArray(list)) return [];
+  return list.map((a) => {
+    const xs = [a.x0, a.x1, a.x2, a.x3].map(toNum).filter((v) => v !== null);
+    const ys = [a.y0, a.y1, a.y2, a.y3].map(toNum).filter((v) => v !== null);
+    if (xs.length < 2 || ys.length < 2) return null;
+    return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)].map(Math.round);
+  }).filter(Boolean);
+}
+function getRestricted(mapState) {
+  const at = mapState?.attributes || {};
+  const walls = (pyParse(at.virtual_walls) || []);
+  return {
+    zones: rects(pyParse(at.no_go_areas)),
+    no_mops: rects(pyParse(at.no_mopping_areas)),
+    walls: Array.isArray(walls) ? walls.map((w) => [w.x0, w.y0, w.x1, w.y1].map((v) => Math.round(toNum(v)))).filter((w) => w.every(Number.isFinite)) : [],
+  };
 }
 
 function getRobotPosition(mapState) {
@@ -1287,6 +1335,30 @@ ha-icon { --mdc-icon-size: 20px; display: inline-flex; width: var(--mdc-icon-siz
 .rp-photo.k-idle .rp-floor { position:absolute; left: 12%; right: 12%; bottom: -2px; height: 26%; border-radius: 50%; background: radial-gradient(closest-side, rgba(63,216,255,.55), rgba(31,125,255,.18) 60%, transparent); }
 .rp-photo.v-error img, .rp-photo.v-unavailable img { filter: grayscale(.85) brightness(.7); }
 .rp-photo.v-paused img { filter: drop-shadow(0 0 8px rgba(255,181,71,.45)); }
+
+/* --- tryby mapy: strefy / punkt / zakazane / edycja --- */
+.map-overlay .hit { fill: transparent; pointer-events: none; }
+.map-view.drawing .map-overlay .hit { pointer-events: all; cursor: crosshair; }
+.map-view.drawing .map-labels .mlabel { pointer-events: none; opacity: .55; }
+.map-view.drawing { cursor: crosshair; }
+.sh { vector-effect: non-scaling-stroke; }
+.sh.zone { fill: rgba(63,216,255,.18); stroke: var(--mx-cyan); cursor: pointer; filter: drop-shadow(0 0 6px rgba(63,216,255,.7)); }
+.sh.nogo { fill: rgba(255,64,96,.2); stroke: #ff4060; cursor: pointer; }
+.sh.nomop { fill: rgba(255,190,60,.18); stroke: #ffbe3c; cursor: pointer; }
+.sh.wall { stroke: #ff4060; stroke-linecap: round; cursor: pointer; }
+.sh.draft { fill: rgba(255,255,255,.12); stroke: #fff; stroke-dasharray: 8 6; }
+.sh.split { stroke: #fff; stroke-dasharray: 10 6; }
+.sh.pt { fill: var(--mx-cyan); } .sh.pt-ring { fill: rgba(63,216,255,.15); stroke: var(--mx-cyan); }
+.sh-txt { fill: #fff; font-weight: 700; text-anchor: middle; dominant-baseline: central; pointer-events: none; text-shadow: 0 0 4px #000; }
+.mode-bar { display:flex; flex-wrap: wrap; align-items:center; justify-content: space-between; gap:10px; margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: rgba(6,16,36,.7); box-shadow: 0 0 0 1px var(--mx-line); }
+.mb-hint { display:flex; align-items:center; gap:8px; font-size: 13px; color: var(--mx-dim); } .mb-hint ha-icon { --mdc-icon-size: 18px; color: var(--mx-cyan); }
+.mb-act { display:flex; flex-wrap: wrap; gap: 8px; align-items:center; }
+.mb-act .seg ha-icon { --mdc-icon-size: 16px; }
+.zone-list { display:flex; flex-direction:column; gap:8px; }
+.zone-item { display:flex; align-items:center; gap:12px; padding: 8px 12px; border-radius: 10px; box-shadow: 0 0 0 1px var(--mx-line); }
+.zone-item span { color: var(--mx-dim); font-size: 13px; flex: 1; }
+.rtable select { background: rgba(6,16,36,.9); color: inherit; border: 1px solid var(--mx-line); border-radius: 6px; padding: 3px 4px; font: inherit; font-size: 12px; }
+.rtable .link ha-icon { --mdc-icon-size: 14px; }
 `;
 
 // ===== src/views/views.js =====
@@ -1406,7 +1478,7 @@ function renderMap(c, dims) {
     const anchors = rooms.filter((rm) => rm.x !== null && rm.visible).map((rm) => { const [x, y] = T(rm.x, rm.y); return `<circle class="anc" data-anc="${rm.id}" cx="${x}" cy="${y}" r="1"/>`; }).join('');
     const robAnc = rp ? (() => { const [x, y] = T(rp.x, rp.y); return `<circle class="anc map-robot" data-anc="robot" cx="${x}" cy="${y}" r="1"/>`; })() : '';
     const chAnc = cp ? (() => { const [x, y] = T(cp.x, cp.y); return `<circle class="anc" data-anc="charger" cx="${x}" cy="${y}" r="1"/>`; })() : '';
-    overlay = `<svg class="map-overlay" viewBox="0 0 ${dims.w} ${dims.h}" width="${dims.w}" height="${dims.h}">${furnSvg}${anchors}${chAnc}${robAnc}</svg>`;
+    overlay = `<svg class="map-overlay ${ui.mode && ui.mode !== 'room' ? 'drawing' : ''}" viewBox="0 0 ${dims.w} ${dims.h}" width="${dims.w}" height="${dims.h}"><rect class="hit" x="0" y="0" width="${dims.w}" height="${dims.h}"/>${furnSvg}${shapesSvg(c, T, ppm)}${anchors}${chAnc}${robAnc}</svg>`;
     // robot i stacja jako stojące obiekty 3D (billboardy), nie spłaszczone z mapą
     const svgMode = c.config.graphics === 'svg';
     bills = `${cp ? `<div class="mbill charger" data-lbl="charger" data-mm="950">${svgMode ? '' : `<img src="${esc(c.config.station_image || ASSETS.station)}" alt="">`}<i class="mb-glow"></i></div>` : ''}
@@ -1434,19 +1506,94 @@ function renderMap(c, dims) {
       <div class="dim2d3d"><button class="${!ui.map3d ? 'on' : ''}" data-act="map2d">2D</button><i></i><button class="${ui.map3d ? 'on' : ''}" data-act="map3d">3D</button></div>
     </div>
     <div class="map-col">
-      <div class="map-view">
+      <div class="map-view ${['zone', 'point', 'nogo'].includes(ui.mode) || ui.splitArm ? 'drawing' : ''}">
         ${hasImg ? `<div class="map-stage"><div class="map-3d ${ui.map3d ? 'on' : ''}"><div class="img-slot"></div>${overlay}</div></div>${labels}`
           : `<div class="map-empty">${icon('mdi:map-marker-off-outline')}<br>${PL.generic.noMap}<br><small>${esc(c.e.map)}</small></div>`}
         <div class="compass">N</div>
       </div>
       <div class="map-modes">
-        <button class="pill active">${icon('mdi:selection-marker')}Pokój</button>
-        <button class="pill" disabled title="${PL.generic.soon}">${icon('mdi:map-marker-radius-outline')}Strefa</button>
-        <button class="pill" disabled title="${PL.generic.soon}">${icon('mdi:crosshairs')}Punkt</button>
-        <button class="pill" disabled title="${PL.generic.soon}">${icon('mdi:alert-outline')}Zakazana</button>
+        ${MODES.map(([m, ic, lab]) => `<button class="pill ${(ui.mode || 'room') === m ? 'active' : ''}" data-act="mode" data-mode="${m}">${icon(ic)}${lab}</button>`).join('')}
       </div>
+      ${renderModeBar(c)}
     </div>
   </section>`;
+}
+
+// ---------- tryby mapy: strefy, punkt, strefy zakazane, edycja ----------
+const MODES = [
+  ['room', 'mdi:selection-marker', 'Pokój'], ['zone', 'mdi:map-marker-radius-outline', 'Strefa'],
+  ['point', 'mdi:crosshairs', 'Punkt'], ['nogo', 'mdi:alert-outline', 'Zakazana'], ['edit', 'mdi:map-marker-path', 'Edycja mapy'],
+];
+const rectPts = (T, r) => [[r[0], r[1]], [r[2], r[1]], [r[2], r[3]], [r[0], r[3]]].map(([x, y]) => T(x, y).map((v) => v.toFixed(1)).join(',')).join(' ');
+const linePts = (T, l) => { const [a, b] = T(l[0], l[1]), [d, e] = T(l[2], l[3]); return `x1="${a}" y1="${b}" x2="${d}" y2="${e}"`; };
+
+function shapesSvg(c, T, ppm) {
+  const ui = c.ui;
+  const sw = Math.max(2, ppm * 0.04);
+  let out = '';
+  // strefy zakazane: w trybie edycji pokazujemy szkic (do zapisu), poza nim stan z mapy
+  const r = ui.mode === 'nogo' && ui.nogo ? ui.nogo : getRestricted(c.cam);
+  const del = ui.mode === 'nogo';
+  out += r.zones.map((z, i) => `<polygon class="sh nogo" ${del ? `data-act="nogo-del" data-kind="zones" data-i="${i}"` : ''} points="${rectPts(T, z)}" style="stroke-width:${sw}"/>`).join('');
+  out += r.no_mops.map((z, i) => `<polygon class="sh nomop" ${del ? `data-act="nogo-del" data-kind="no_mops" data-i="${i}"` : ''} points="${rectPts(T, z)}" style="stroke-width:${sw}"/>`).join('');
+  out += r.walls.map((l, i) => `<line class="sh wall" ${del ? `data-act="nogo-del" data-kind="walls" data-i="${i}"` : ''} ${linePts(T, l)} style="stroke-width:${sw * 2}"/>`).join('');
+  if (ui.mode === 'zone' || ui.roomsView === 'zones') {
+    out += (ui.zones || []).map((z, i) => {
+      const [cx, cy] = T((z[0] + z[2]) / 2, (z[1] + z[3]) / 2);
+      return `<polygon class="sh zone" data-act="zone-del" data-i="${i}" points="${rectPts(T, z)}" style="stroke-width:${sw}"/><text class="sh-txt" x="${cx}" y="${cy}" style="font-size:${ppm * 0.4}px">${i + 1}</text>`;
+    }).join('');
+  }
+  if (ui.mode === 'point' && ui.point) {
+    const [x, y] = T(ui.point[0], ui.point[1]);
+    out += `<circle class="sh pt-ring" cx="${x}" cy="${y}" r="${ppm * 0.75}" style="stroke-width:${sw}"/><circle class="sh pt" cx="${x}" cy="${y}" r="${ppm * 0.15}"/>`;
+  }
+  if (ui.mode === 'edit' && ui.splitLine) out += `<line class="sh split" ${linePts(T, ui.splitLine)} style="stroke-width:${sw * 1.5}"/>`;
+  if (ui.draft) {
+    const d = ui.draft;
+    out += d.line ? `<line class="sh draft" ${linePts(T, d.r)} style="stroke-width:${sw * 1.5}"/>` : `<polygon class="sh draft" points="${rectPts(T, [Math.min(d.r[0], d.r[2]), Math.min(d.r[1], d.r[3]), Math.max(d.r[0], d.r[2]), Math.max(d.r[1], d.r[3])])}" style="stroke-width:${sw}"/>`;
+  }
+  return out;
+}
+
+function repeatsSeg(c) {
+  const rp = c.ui.repeats || 1;
+  return `<div class="seg">${[1, 2, 3].map((n) => `<button class="${rp === n ? 'on' : ''}" data-act="repeats" data-n="${n}">${n}×</button>`).join('')}</div>`;
+}
+
+function renderModeBar(c) {
+  const ui = c.ui;
+  const mode = ui.mode || 'room';
+  const can = (svc) => c.hass?.services?.dreame_vacuum?.[svc];
+  const miss = (svc) => (can(svc) ? '' : `disabled title="Brak usługi dreame_vacuum.${svc} — zaktualizuj integrację"`);
+  const bar = (hint, inner) => `<div class="mode-bar"><span class="mb-hint">${icon('mdi:gesture-tap')}${hint}</span><div class="mb-act">${inner}</div></div>`;
+  if (mode === 'zone') {
+    const n = (ui.zones || []).length;
+    return bar(`Przeciągnij po mapie, żeby narysować strefę (max 4). Kliknij strefę, żeby ją usunąć. Mapa w trybie 2D.`,
+      `${repeatsSeg(c)}<button class="pill active" data-act="zone-clean" ${!n ? 'disabled' : miss('vacuum_clean_zone')}>${icon('mdi:play')}Sprzątaj strefy${n ? ` (${n})` : ''}</button>
+       <button class="pill" data-act="zone-clear" ${!n ? 'disabled' : ''}>Wyczyść</button>`);
+  }
+  if (mode === 'point') {
+    return bar(ui.point ? `Punkt: ${ui.point[0]}, ${ui.point[1]} mm` : 'Kliknij w mapę, żeby wskazać punkt.',
+      `${repeatsSeg(c)}<button class="pill active" data-act="goto" ${!ui.point ? 'disabled' : miss('vacuum_goto')}>${icon('mdi:map-marker-right')}Jedź tutaj</button>
+       <button class="pill" data-act="spot" ${!ui.point ? 'disabled' : miss('vacuum_clean_spot')}>${icon('mdi:target')}Sprzątaj punkt</button>`);
+  }
+  if (mode === 'nogo') {
+    const k = ui.nogoKind || 'zones';
+    const kinds = [['zones', 'mdi:cancel', 'Zakaz wjazdu'], ['no_mops', 'mdi:water-off-outline', 'Bez mopa'], ['walls', 'mdi:wall', 'Ściana']];
+    return bar(`Rysuj przeciągając. Kliknij istniejącą, żeby usunąć. Zmiany idą do robota dopiero po „Zapisz”.`,
+      `<div class="seg">${kinds.map(([v, ic, lab]) => `<button class="${k === v ? 'on' : ''}" data-act="nogo-kind" data-kind="${v}">${icon(ic)}${lab}</button>`).join('')}</div>
+       <button class="pill active" data-act="nogo-save" ${!ui.nogoDirty ? 'disabled' : miss('vacuum_set_restricted_zone')}>${icon('mdi:content-save')}Zapisz</button>
+       <button class="pill" data-act="nogo-reset" ${!ui.nogoDirty ? 'disabled' : ''}>Cofnij zmiany</button>`);
+  }
+  if (mode === 'edit') {
+    const sel = [...ui.selected];
+    return bar(ui.splitArm ? 'Narysuj linię podziału przez zaznaczony pokój.' : 'Zaznacz pokój(e) etykietami na mapie.',
+      `<button class="pill" data-act="seg-rename" ${sel.length !== 1 ? 'disabled' : miss('vacuum_rename_segment')}>${icon('mdi:rename-box')}Zmień nazwę</button>
+       <button class="pill" data-act="seg-merge" ${sel.length !== 2 ? 'disabled' : miss('vacuum_merge_segments')}>${icon('mdi:vector-union')}Połącz (2)</button>
+       <button class="pill ${ui.splitArm ? 'active' : ''}" data-act="seg-split-arm" ${sel.length !== 1 ? 'disabled' : miss('vacuum_split_segments')}>${icon('mdi:vector-line')}Podziel</button>
+       ${ui.splitLine ? `<button class="pill active" data-act="seg-split">${icon('mdi:check')}Zatwierdź podział</button>` : ''}`);
+  }
+  return '';
 }
 
 // ---------- stacja ----------
@@ -1612,15 +1759,24 @@ function renderRooms(c, canClean) {
     <div class="ptitle"><span>${PL.generic.rooms} (${rooms.length})</span>
       <div class="seg">
         <button class="${view === 'all' ? 'on' : ''}" data-act="roomsview" data-view="all">Wszystkie</button>
-        <button disabled title="${PL.generic.soon}">Strefy</button>
+        <button class="${view === 'zones' ? 'on' : ''}" data-act="roomsview" data-view="zones">Strefy</button>
         <button class="${view === 'order' ? 'on' : ''}" data-act="roomsview" data-view="order">Kolejność</button>
       </div></div>
-    <div class="rooms">${tiles || '<span class="dim">Brak danych pokoi</span>'}</div>
-    <div class="room-actions ${sel.size ? 'show' : ''}">
+    ${view === 'zones' ? renderZoneList(c) : `<div class="rooms">${tiles || '<span class="dim">Brak danych pokoi</span>'}</div>`}
+    <div class="room-actions ${sel.size && view !== 'zones' ? 'show' : ''}">
       <button class="pill active" data-act="clean-rooms" ${!sel.size || !canClean ? 'disabled' : ''}>${icon('mdi:play')}${PL.generic.cleanSelected}${sel.size ? ` (${sel.size})` : ''}</button>
       <button class="pill" data-act="clear-rooms" ${!sel.size ? 'disabled' : ''}>${PL.generic.clear}</button>
     </div>
   </section>`;
+}
+
+function renderZoneList(c) {
+  const z = c.ui.zones || [];
+  const items = z.map((r, i) => `<div class="zone-item"><b>Strefa ${i + 1}</b><span>${fmtNum(Math.abs(r[2] - r[0]) / 1000)} × ${fmtNum(Math.abs(r[3] - r[1]) / 1000)} m</span>
+    <button class="pill" data-act="zone-del" data-i="${i}">${icon('mdi:delete-outline')}Usuń</button></div>`).join('');
+  return `<div class="zone-list">${items || '<span class="dim">Brak stref — narysuj je na mapie w trybie „Strefa”.</span>'}</div>
+    <div class="room-actions show">${repeatsSeg(c)}<button class="pill" data-act="mode" data-mode="zone">${icon('mdi:draw')}Rysuj na mapie</button>
+    <button class="pill active" data-act="zone-clean" ${!z.length || !c.hass?.services?.dreame_vacuum?.vacuum_clean_zone ? 'disabled' : ''}>${icon('mdi:play')}Sprzątaj strefy</button></div>`;
 }
 
 // ---------- ustawienia zaawansowane ----------
@@ -1798,13 +1954,17 @@ function renderRoomDetails(c) {
   const rooms = getRooms(c.vac, c.cam);
   const keys = ['order', 'floor_material', 'floor_material_direction', 'cleaning_mode', 'suction_level', 'mop_pad_humidity', 'cleaning_times', 'cleaning_route', 'visibility'];
   const labels = { order: 'Kolejność', floor_material: 'Podłoga', floor_material_direction: 'Kierunek', cleaning_mode: 'Tryb', suction_level: 'Ssanie', mop_pad_humidity: 'Mop', cleaning_times: 'Przejazdy', cleaning_route: 'Trasa', visibility: 'Widoczność' };
-  const rows = rooms.map((r) => `<tr><td><b>${esc(r.name || r.id)}</b> <span class="dim">#${r.id}</span></td>${keys.map((k) => {
+  const rows = rooms.map((r) => `<tr><td><b>${esc(r.name || r.id)}</b> <span class="dim">#${r.id}</span> <button class="link" data-act="seg-rename" data-room="${r.id}" title="Zmień nazwę">${icon('mdi:pencil')}</button></td>${keys.map((k) => {
     const so = c.hass.states[roomEntity(c.config, r.id, k)];
-    return `<td>${so && !isUnavail(so) ? esc(optLabel(so.state)) : '<span class="dim">—</span>'}</td>`;
+    if (!so || isUnavail(so)) return '<td><span class="dim">—</span></td>';
+    if (so.entity_id.startsWith('select.') && opts(so).length) {
+      return `<td><select data-act="select-change" data-entity="${esc(so.entity_id)}">${opts(so).map((o) => `<option value="${esc(o)}" ${o === so.state ? 'selected' : ''}>${esc(optLabel(o))}</option>`).join('')}</select></td>`;
+    }
+    return `<td>${esc(optLabel(so.state))}</td>`;
   }).join('')}</tr>`).join('');
   return `
   <section class="panel" style="overflow-x:auto">
-    <h3 class="ptitle">Ustawienia per pokój <span class="dim small">podgląd · „—” = niedostępne (np. wyłączone Sprzątanie niestandardowe)</span></h3>
+    <h3 class="ptitle">Ustawienia per pokój <span class="dim small">zmiana od razu zapisuje się w robocie · „—” = niedostępne (np. wyłączone Sprzątanie niestandardowe)</span></h3>
     <table class="rtable"><thead><tr><th>Pokój</th>${keys.map((k) => `<th>${labels[k]}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table>
   </section>`;
 }
@@ -1856,7 +2016,7 @@ class MieciuX50Card extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
-    this._ui = { tab: 'map', advTab: 'cleangenius', roomsView: 'all', selected: new Set(), map3d: true, holo: true, labels: true };
+    this._ui = { tab: 'map', advTab: 'cleangenius', roomsView: 'all', selected: new Set(), map3d: true, holo: true, labels: true, mode: 'room', zones: [], point: null, repeats: 1, nogo: null, nogoKind: 'zones', nogoDirty: false, draft: null, splitArm: false, splitLine: null };
     this._view = { x: 0, y: 0, z: null };
     this._refs = [];
     this._mapImg = null;
@@ -2118,6 +2278,55 @@ class MieciuX50Card extends HTMLElement {
     this._applyView();
   }
 
+  // czy pociągnięcie po mapie rysuje (zamiast przesuwać)
+  _drawing() {
+    const m = this._ui.mode;
+    return m === 'zone' || m === 'nogo' || m === 'point' || (m === 'edit' && this._ui.splitArm);
+  }
+
+  // punkt ekranu -> współrzędne robota (mm); mapa jest wtedy w 2D
+  _toMm(ev) {
+    const svg = this.shadowRoot.querySelector('.map-overlay');
+    const c = this._hass?.states[this._e.map];
+    const inv = invertTransform(buildTransform(c?.attributes?.calibration_points));
+    if (!svg || !inv || !svg.getScreenCTM()) return null;
+    const pt = svg.createSVGPoint();
+    pt.x = ev.clientX; pt.y = ev.clientY;
+    const p = pt.matrixTransform(svg.getScreenCTM().inverse());
+    return inv(p.x, p.y);
+  }
+
+  _setMode(mode) {
+    const ui = this._ui;
+    ui.mode = ui.mode === mode && mode !== 'room' ? 'room' : mode;
+    ui.draft = null; ui.splitArm = false; ui.splitLine = null;
+    if (ui.mode === 'nogo' && !ui.nogo) { ui.nogo = getRestricted(this._hass.states[this._e.map]); ui.nogoDirty = false; }
+    if (ui.mode !== 'room' && ui.mode !== 'edit' && ui.map3d) { ui.map3d = false; this._view.z = null; }
+    if (ui.mode !== 'edit' && ui.mode !== 'room') ui.selected.clear();
+    this._schedule();
+  }
+
+  _finishDraft() {
+    const ui = this._ui, d = ui.draft;
+    ui.draft = null;
+    if (!d) return;
+    const [x0, y0, x1, y1] = d.r;
+    const len = Math.hypot(x1 - x0, y1 - y0);
+    if (d.line) {
+      if (len < 300) return this._schedule();
+      if (ui.mode === 'edit') ui.splitLine = d.r;
+      else { ui.nogo.walls.push(d.r); ui.nogoDirty = true; }
+    } else {
+      const r = [Math.min(x0, x1), Math.min(y0, y1), Math.max(x0, x1), Math.max(y0, y1)];
+      if (r[2] - r[0] < 300 || r[3] - r[1] < 300) { this._toast('Za mała strefa (min. 30 cm)'); return; }
+      if (ui.mode === 'zone') {
+        if (ui.zones.length >= 4) { this._toast('Maksymalnie 4 strefy'); return; }
+        ui.zones.push(r);
+      } else { ui.nogo[ui.nogoKind].push(r); ui.nogoDirty = true; }
+    }
+    this._schedule();
+  }
+
   _bind() {
     if (this._bound) return;
     this._bound = true;
@@ -2127,18 +2336,38 @@ class MieciuX50Card extends HTMLElement {
     root.addEventListener('pointerdown', (ev) => {
       const view = ev.target.closest?.('.map-view');
       if (!view || ev.button !== 0) return;
+      if (this._drawing() && !this._ui.map3d) {
+        const p = this._toMm(ev);
+        if (!p) return;
+        const line = (this._ui.mode === 'nogo' && this._ui.nogoKind === 'walls') || this._ui.mode === 'edit';
+        drag = { draw: true, sx: ev.clientX, sy: ev.clientY, p, moved: false, view, line };
+        return;
+      }
       drag = { sx: ev.clientX, sy: ev.clientY, x: this._view.x, y: this._view.y, moved: false, view };
     });
     root.addEventListener('pointermove', (ev) => {
       if (!drag) return;
       const dx = ev.clientX - drag.sx, dy = ev.clientY - drag.sy;
       if (!drag.moved && Math.hypot(dx, dy) < 6) return;
+      if (drag.draw) {
+        if (this._ui.mode === 'point') return;
+        if (!drag.moved) { drag.moved = true; drag.view.setPointerCapture?.(ev.pointerId); }
+        const q = this._toMm(ev);
+        if (q) { this._ui.draft = { line: drag.line, r: [drag.p[0], drag.p[1], q[0], q[1]] }; this._schedule(); }
+        return;
+      }
       if (!drag.moved) { drag.moved = true; drag.view.classList.add('dragging'); drag.view.setPointerCapture?.(ev.pointerId); }
       this._view.x = drag.x + dx; this._view.y = drag.y + dy;
       this._applyView();
     });
     const end = () => {
       if (!drag) return;
+      if (drag.draw) {
+        const d = drag; drag = null;
+        if (d.moved) { this._dragMoved = true; setTimeout(() => { this._dragMoved = false; }, 0); this._finishDraft(); }
+        else if (this._ui.mode === 'point') { this._ui.point = d.p; this._schedule(); }
+        return;
+      }
       drag.view.classList.remove('dragging');
       this._dragMoved = drag.moved;
       drag = null;
@@ -2198,7 +2427,7 @@ class MieciuX50Card extends HTMLElement {
           this._call(() => Commands.press(hass, el.dataset.entity), 'Wysłano');
           break;
         }
-        case 'map3d': this._ui.map3d = true; this._view.z = null; this._schedule(); break;
+        case 'map3d': if (this._drawing()) { this._toast('Rysowanie działa w 2D'); break; } this._ui.map3d = true; this._view.z = null; this._schedule(); break;
         case 'map2d': this._ui.map3d = false; this._view.z = null; this._schedule(); break;
         case 'labels': this._ui.labels = !this._ui.labels; this._schedule(); break;
         case 'roomsview': this._ui.roomsView = el.dataset.view; this._schedule(); break;
@@ -2208,6 +2437,53 @@ class MieciuX50Card extends HTMLElement {
           const options = Array.isArray(so?.attributes?.options) ? so.attributes.options : [];
           const target = on ? 'off' : (options.find((o) => o !== 'off') || null);
           if (target) this._call(() => Commands.selectOption(hass, el.dataset.entity, target));
+          break;
+        }
+        case 'mode': if (this._ui.tab !== 'map') this._ui.tab = 'map'; this._setMode(el.dataset.mode); break;
+        case 'repeats': this._ui.repeats = Number(el.dataset.n) || 1; this._schedule(); break;
+        case 'zone-del': this._ui.zones.splice(Number(el.dataset.i), 1); this._schedule(); break;
+        case 'zone-clear': this._ui.zones = []; this._schedule(); break;
+        case 'zone-clean': {
+          const z = this._ui.zones.map((r) => r.slice());
+          if (!z.length) return;
+          this._call(() => Commands.cleanZones(hass, vac, z, this._ui.repeats), `Sprzątanie ${z.length} stref`);
+          break;
+        }
+        case 'goto': if (this._ui.point) this._call(() => Commands.goto(hass, vac, this._ui.point[0], this._ui.point[1]), 'Jadę do punktu'); break;
+        case 'spot': if (this._ui.point) this._call(() => Commands.cleanSpot(hass, vac, [this._ui.point], this._ui.repeats), 'Sprzątanie punktu'); break;
+        case 'nogo-kind': this._ui.nogoKind = el.dataset.kind; this._schedule(); break;
+        case 'nogo-del': {
+          const k = el.dataset.kind;
+          if (!this._ui.nogo?.[k]) return;
+          this._ui.nogo[k].splice(Number(el.dataset.i), 1); this._ui.nogoDirty = true; this._schedule(); break;
+        }
+        case 'nogo-reset': this._ui.nogo = getRestricted(hass.states[this._e.map]); this._ui.nogoDirty = false; this._schedule(); break;
+        case 'nogo-save': {
+          const r = this._ui.nogo;
+          if (!window.confirm(`Zapisać strefy w robocie?\nZakaz wjazdu: ${r.zones.length}, bez mopa: ${r.no_mops.length}, ściany: ${r.walls.length}\n(nadpisuje wszystkie obecne strefy na tej mapie)`)) return;
+          this._call(async () => { await Commands.setRestricted(hass, vac, r); this._ui.nogoDirty = false; this._ui.nogo = null; this._ui.mode = 'room'; }, 'Strefy zapisane');
+          break;
+        }
+        case 'seg-rename': {
+          const id = Number(el.dataset.room || [...this._ui.selected][0]);
+          const c = makeCtx(hass, this._config, this._e, this._ui);
+          const room = getRooms(c.vac, c.cam).find((r) => r.id === id);
+          const name = window.prompt(`Nowa nazwa pokoju #${id}`, room?.name || '');
+          if (name && name.trim() && name.trim() !== room?.name) this._call(() => Commands.renameSegment(hass, vac, id, name.trim()), 'Zmieniono nazwę');
+          break;
+        }
+        case 'seg-merge': {
+          const ids = [...this._ui.selected];
+          if (ids.length !== 2 || !window.confirm(`Połączyć pokoje #${ids[0]} i #${ids[1]}?\nTej operacji nie da się cofnąć z karty.`)) return;
+          this._call(async () => { await Commands.mergeSegments(hass, vac, ids); this._ui.selected.clear(); }, 'Połączono');
+          break;
+        }
+        case 'seg-split-arm': this._ui.splitArm = !this._ui.splitArm; this._ui.splitLine = null; if (this._ui.splitArm && this._ui.map3d) { this._ui.map3d = false; this._view.z = null; } this._schedule(); break;
+        case 'seg-split': {
+          const id = [...this._ui.selected][0];
+          const line = this._ui.splitLine;
+          if (!id || !line || !window.confirm(`Podzielić pokój #${id} narysowaną linią?\nTej operacji nie da się cofnąć z karty.`)) return;
+          this._call(async () => { await Commands.splitSegment(hass, vac, id, line); this._ui.splitArm = false; this._ui.splitLine = null; this._ui.selected.clear(); }, 'Podzielono');
           break;
         }
         case 'holo': this._ui.holo = !this._ui.holo; this._schedule(); break;

@@ -5,7 +5,7 @@ import { esc, toNum, toBool, fmtNum, fmtMinutes, isUnavail, pyParse } from '../u
 import { SERVICE_ITEMS, roomEntity, discoverSwitches } from '../adapter/entities.js';
 import { stationSvg, heroRobotSvg, tankSvg } from '../graphics/station.js';
 import { tankStatus, STATION_ACTIVE } from '../state/visual-state.js';
-import { buildTransform, getRooms, getRobotPosition, getChargerPosition } from '../adapter/map.js';
+import { buildTransform, getRooms, getRobotPosition, getChargerPosition, getRestricted } from '../adapter/map.js';
 import { ASSETS } from '../graphics/assets.js';
 import { partSvg } from '../graphics/parts.js';
 import { NEON } from '../adapter/map-render.js';
@@ -115,7 +115,7 @@ export function renderMap(c, dims) {
     const anchors = rooms.filter((rm) => rm.x !== null && rm.visible).map((rm) => { const [x, y] = T(rm.x, rm.y); return `<circle class="anc" data-anc="${rm.id}" cx="${x}" cy="${y}" r="1"/>`; }).join('');
     const robAnc = rp ? (() => { const [x, y] = T(rp.x, rp.y); return `<circle class="anc map-robot" data-anc="robot" cx="${x}" cy="${y}" r="1"/>`; })() : '';
     const chAnc = cp ? (() => { const [x, y] = T(cp.x, cp.y); return `<circle class="anc" data-anc="charger" cx="${x}" cy="${y}" r="1"/>`; })() : '';
-    overlay = `<svg class="map-overlay" viewBox="0 0 ${dims.w} ${dims.h}" width="${dims.w}" height="${dims.h}">${furnSvg}${anchors}${chAnc}${robAnc}</svg>`;
+    overlay = `<svg class="map-overlay ${ui.mode && ui.mode !== 'room' ? 'drawing' : ''}" viewBox="0 0 ${dims.w} ${dims.h}" width="${dims.w}" height="${dims.h}"><rect class="hit" x="0" y="0" width="${dims.w}" height="${dims.h}"/>${furnSvg}${shapesSvg(c, T, ppm)}${anchors}${chAnc}${robAnc}</svg>`;
     // robot i stacja jako stojące obiekty 3D (billboardy), nie spłaszczone z mapą
     const svgMode = c.config.graphics === 'svg';
     bills = `${cp ? `<div class="mbill charger" data-lbl="charger" data-mm="950">${svgMode ? '' : `<img src="${esc(c.config.station_image || ASSETS.station)}" alt="">`}<i class="mb-glow"></i></div>` : ''}
@@ -143,19 +143,94 @@ export function renderMap(c, dims) {
       <div class="dim2d3d"><button class="${!ui.map3d ? 'on' : ''}" data-act="map2d">2D</button><i></i><button class="${ui.map3d ? 'on' : ''}" data-act="map3d">3D</button></div>
     </div>
     <div class="map-col">
-      <div class="map-view">
+      <div class="map-view ${['zone', 'point', 'nogo'].includes(ui.mode) || ui.splitArm ? 'drawing' : ''}">
         ${hasImg ? `<div class="map-stage"><div class="map-3d ${ui.map3d ? 'on' : ''}"><div class="img-slot"></div>${overlay}</div></div>${labels}`
           : `<div class="map-empty">${icon('mdi:map-marker-off-outline')}<br>${PL.generic.noMap}<br><small>${esc(c.e.map)}</small></div>`}
         <div class="compass">N</div>
       </div>
       <div class="map-modes">
-        <button class="pill active">${icon('mdi:selection-marker')}Pokój</button>
-        <button class="pill" disabled title="${PL.generic.soon}">${icon('mdi:map-marker-radius-outline')}Strefa</button>
-        <button class="pill" disabled title="${PL.generic.soon}">${icon('mdi:crosshairs')}Punkt</button>
-        <button class="pill" disabled title="${PL.generic.soon}">${icon('mdi:alert-outline')}Zakazana</button>
+        ${MODES.map(([m, ic, lab]) => `<button class="pill ${(ui.mode || 'room') === m ? 'active' : ''}" data-act="mode" data-mode="${m}">${icon(ic)}${lab}</button>`).join('')}
       </div>
+      ${renderModeBar(c)}
     </div>
   </section>`;
+}
+
+// ---------- tryby mapy: strefy, punkt, strefy zakazane, edycja ----------
+const MODES = [
+  ['room', 'mdi:selection-marker', 'Pokój'], ['zone', 'mdi:map-marker-radius-outline', 'Strefa'],
+  ['point', 'mdi:crosshairs', 'Punkt'], ['nogo', 'mdi:alert-outline', 'Zakazana'], ['edit', 'mdi:map-marker-path', 'Edycja mapy'],
+];
+const rectPts = (T, r) => [[r[0], r[1]], [r[2], r[1]], [r[2], r[3]], [r[0], r[3]]].map(([x, y]) => T(x, y).map((v) => v.toFixed(1)).join(',')).join(' ');
+const linePts = (T, l) => { const [a, b] = T(l[0], l[1]), [d, e] = T(l[2], l[3]); return `x1="${a}" y1="${b}" x2="${d}" y2="${e}"`; };
+
+function shapesSvg(c, T, ppm) {
+  const ui = c.ui;
+  const sw = Math.max(2, ppm * 0.04);
+  let out = '';
+  // strefy zakazane: w trybie edycji pokazujemy szkic (do zapisu), poza nim stan z mapy
+  const r = ui.mode === 'nogo' && ui.nogo ? ui.nogo : getRestricted(c.cam);
+  const del = ui.mode === 'nogo';
+  out += r.zones.map((z, i) => `<polygon class="sh nogo" ${del ? `data-act="nogo-del" data-kind="zones" data-i="${i}"` : ''} points="${rectPts(T, z)}" style="stroke-width:${sw}"/>`).join('');
+  out += r.no_mops.map((z, i) => `<polygon class="sh nomop" ${del ? `data-act="nogo-del" data-kind="no_mops" data-i="${i}"` : ''} points="${rectPts(T, z)}" style="stroke-width:${sw}"/>`).join('');
+  out += r.walls.map((l, i) => `<line class="sh wall" ${del ? `data-act="nogo-del" data-kind="walls" data-i="${i}"` : ''} ${linePts(T, l)} style="stroke-width:${sw * 2}"/>`).join('');
+  if (ui.mode === 'zone' || ui.roomsView === 'zones') {
+    out += (ui.zones || []).map((z, i) => {
+      const [cx, cy] = T((z[0] + z[2]) / 2, (z[1] + z[3]) / 2);
+      return `<polygon class="sh zone" data-act="zone-del" data-i="${i}" points="${rectPts(T, z)}" style="stroke-width:${sw}"/><text class="sh-txt" x="${cx}" y="${cy}" style="font-size:${ppm * 0.4}px">${i + 1}</text>`;
+    }).join('');
+  }
+  if (ui.mode === 'point' && ui.point) {
+    const [x, y] = T(ui.point[0], ui.point[1]);
+    out += `<circle class="sh pt-ring" cx="${x}" cy="${y}" r="${ppm * 0.75}" style="stroke-width:${sw}"/><circle class="sh pt" cx="${x}" cy="${y}" r="${ppm * 0.15}"/>`;
+  }
+  if (ui.mode === 'edit' && ui.splitLine) out += `<line class="sh split" ${linePts(T, ui.splitLine)} style="stroke-width:${sw * 1.5}"/>`;
+  if (ui.draft) {
+    const d = ui.draft;
+    out += d.line ? `<line class="sh draft" ${linePts(T, d.r)} style="stroke-width:${sw * 1.5}"/>` : `<polygon class="sh draft" points="${rectPts(T, [Math.min(d.r[0], d.r[2]), Math.min(d.r[1], d.r[3]), Math.max(d.r[0], d.r[2]), Math.max(d.r[1], d.r[3])])}" style="stroke-width:${sw}"/>`;
+  }
+  return out;
+}
+
+function repeatsSeg(c) {
+  const rp = c.ui.repeats || 1;
+  return `<div class="seg">${[1, 2, 3].map((n) => `<button class="${rp === n ? 'on' : ''}" data-act="repeats" data-n="${n}">${n}×</button>`).join('')}</div>`;
+}
+
+export function renderModeBar(c) {
+  const ui = c.ui;
+  const mode = ui.mode || 'room';
+  const can = (svc) => c.hass?.services?.dreame_vacuum?.[svc];
+  const miss = (svc) => (can(svc) ? '' : `disabled title="Brak usługi dreame_vacuum.${svc} — zaktualizuj integrację"`);
+  const bar = (hint, inner) => `<div class="mode-bar"><span class="mb-hint">${icon('mdi:gesture-tap')}${hint}</span><div class="mb-act">${inner}</div></div>`;
+  if (mode === 'zone') {
+    const n = (ui.zones || []).length;
+    return bar(`Przeciągnij po mapie, żeby narysować strefę (max 4). Kliknij strefę, żeby ją usunąć. Mapa w trybie 2D.`,
+      `${repeatsSeg(c)}<button class="pill active" data-act="zone-clean" ${!n ? 'disabled' : miss('vacuum_clean_zone')}>${icon('mdi:play')}Sprzątaj strefy${n ? ` (${n})` : ''}</button>
+       <button class="pill" data-act="zone-clear" ${!n ? 'disabled' : ''}>Wyczyść</button>`);
+  }
+  if (mode === 'point') {
+    return bar(ui.point ? `Punkt: ${ui.point[0]}, ${ui.point[1]} mm` : 'Kliknij w mapę, żeby wskazać punkt.',
+      `${repeatsSeg(c)}<button class="pill active" data-act="goto" ${!ui.point ? 'disabled' : miss('vacuum_goto')}>${icon('mdi:map-marker-right')}Jedź tutaj</button>
+       <button class="pill" data-act="spot" ${!ui.point ? 'disabled' : miss('vacuum_clean_spot')}>${icon('mdi:target')}Sprzątaj punkt</button>`);
+  }
+  if (mode === 'nogo') {
+    const k = ui.nogoKind || 'zones';
+    const kinds = [['zones', 'mdi:cancel', 'Zakaz wjazdu'], ['no_mops', 'mdi:water-off-outline', 'Bez mopa'], ['walls', 'mdi:wall', 'Ściana']];
+    return bar(`Rysuj przeciągając. Kliknij istniejącą, żeby usunąć. Zmiany idą do robota dopiero po „Zapisz”.`,
+      `<div class="seg">${kinds.map(([v, ic, lab]) => `<button class="${k === v ? 'on' : ''}" data-act="nogo-kind" data-kind="${v}">${icon(ic)}${lab}</button>`).join('')}</div>
+       <button class="pill active" data-act="nogo-save" ${!ui.nogoDirty ? 'disabled' : miss('vacuum_set_restricted_zone')}>${icon('mdi:content-save')}Zapisz</button>
+       <button class="pill" data-act="nogo-reset" ${!ui.nogoDirty ? 'disabled' : ''}>Cofnij zmiany</button>`);
+  }
+  if (mode === 'edit') {
+    const sel = [...ui.selected];
+    return bar(ui.splitArm ? 'Narysuj linię podziału przez zaznaczony pokój.' : 'Zaznacz pokój(e) etykietami na mapie.',
+      `<button class="pill" data-act="seg-rename" ${sel.length !== 1 ? 'disabled' : miss('vacuum_rename_segment')}>${icon('mdi:rename-box')}Zmień nazwę</button>
+       <button class="pill" data-act="seg-merge" ${sel.length !== 2 ? 'disabled' : miss('vacuum_merge_segments')}>${icon('mdi:vector-union')}Połącz (2)</button>
+       <button class="pill ${ui.splitArm ? 'active' : ''}" data-act="seg-split-arm" ${sel.length !== 1 ? 'disabled' : miss('vacuum_split_segments')}>${icon('mdi:vector-line')}Podziel</button>
+       ${ui.splitLine ? `<button class="pill active" data-act="seg-split">${icon('mdi:check')}Zatwierdź podział</button>` : ''}`);
+  }
+  return '';
 }
 
 // ---------- stacja ----------
@@ -321,15 +396,24 @@ export function renderRooms(c, canClean) {
     <div class="ptitle"><span>${PL.generic.rooms} (${rooms.length})</span>
       <div class="seg">
         <button class="${view === 'all' ? 'on' : ''}" data-act="roomsview" data-view="all">Wszystkie</button>
-        <button disabled title="${PL.generic.soon}">Strefy</button>
+        <button class="${view === 'zones' ? 'on' : ''}" data-act="roomsview" data-view="zones">Strefy</button>
         <button class="${view === 'order' ? 'on' : ''}" data-act="roomsview" data-view="order">Kolejność</button>
       </div></div>
-    <div class="rooms">${tiles || '<span class="dim">Brak danych pokoi</span>'}</div>
-    <div class="room-actions ${sel.size ? 'show' : ''}">
+    ${view === 'zones' ? renderZoneList(c) : `<div class="rooms">${tiles || '<span class="dim">Brak danych pokoi</span>'}</div>`}
+    <div class="room-actions ${sel.size && view !== 'zones' ? 'show' : ''}">
       <button class="pill active" data-act="clean-rooms" ${!sel.size || !canClean ? 'disabled' : ''}>${icon('mdi:play')}${PL.generic.cleanSelected}${sel.size ? ` (${sel.size})` : ''}</button>
       <button class="pill" data-act="clear-rooms" ${!sel.size ? 'disabled' : ''}>${PL.generic.clear}</button>
     </div>
   </section>`;
+}
+
+function renderZoneList(c) {
+  const z = c.ui.zones || [];
+  const items = z.map((r, i) => `<div class="zone-item"><b>Strefa ${i + 1}</b><span>${fmtNum(Math.abs(r[2] - r[0]) / 1000)} × ${fmtNum(Math.abs(r[3] - r[1]) / 1000)} m</span>
+    <button class="pill" data-act="zone-del" data-i="${i}">${icon('mdi:delete-outline')}Usuń</button></div>`).join('');
+  return `<div class="zone-list">${items || '<span class="dim">Brak stref — narysuj je na mapie w trybie „Strefa”.</span>'}</div>
+    <div class="room-actions show">${repeatsSeg(c)}<button class="pill" data-act="mode" data-mode="zone">${icon('mdi:draw')}Rysuj na mapie</button>
+    <button class="pill active" data-act="zone-clean" ${!z.length || !c.hass?.services?.dreame_vacuum?.vacuum_clean_zone ? 'disabled' : ''}>${icon('mdi:play')}Sprzątaj strefy</button></div>`;
 }
 
 // ---------- ustawienia zaawansowane ----------
@@ -507,13 +591,17 @@ export function renderRoomDetails(c) {
   const rooms = getRooms(c.vac, c.cam);
   const keys = ['order', 'floor_material', 'floor_material_direction', 'cleaning_mode', 'suction_level', 'mop_pad_humidity', 'cleaning_times', 'cleaning_route', 'visibility'];
   const labels = { order: 'Kolejność', floor_material: 'Podłoga', floor_material_direction: 'Kierunek', cleaning_mode: 'Tryb', suction_level: 'Ssanie', mop_pad_humidity: 'Mop', cleaning_times: 'Przejazdy', cleaning_route: 'Trasa', visibility: 'Widoczność' };
-  const rows = rooms.map((r) => `<tr><td><b>${esc(r.name || r.id)}</b> <span class="dim">#${r.id}</span></td>${keys.map((k) => {
+  const rows = rooms.map((r) => `<tr><td><b>${esc(r.name || r.id)}</b> <span class="dim">#${r.id}</span> <button class="link" data-act="seg-rename" data-room="${r.id}" title="Zmień nazwę">${icon('mdi:pencil')}</button></td>${keys.map((k) => {
     const so = c.hass.states[roomEntity(c.config, r.id, k)];
-    return `<td>${so && !isUnavail(so) ? esc(optLabel(so.state)) : '<span class="dim">—</span>'}</td>`;
+    if (!so || isUnavail(so)) return '<td><span class="dim">—</span></td>';
+    if (so.entity_id.startsWith('select.') && opts(so).length) {
+      return `<td><select data-act="select-change" data-entity="${esc(so.entity_id)}">${opts(so).map((o) => `<option value="${esc(o)}" ${o === so.state ? 'selected' : ''}>${esc(optLabel(o))}</option>`).join('')}</select></td>`;
+    }
+    return `<td>${esc(optLabel(so.state))}</td>`;
   }).join('')}</tr>`).join('');
   return `
   <section class="panel" style="overflow-x:auto">
-    <h3 class="ptitle">Ustawienia per pokój <span class="dim small">podgląd · „—” = niedostępne (np. wyłączone Sprzątanie niestandardowe)</span></h3>
+    <h3 class="ptitle">Ustawienia per pokój <span class="dim small">zmiana od razu zapisuje się w robocie · „—” = niedostępne (np. wyłączone Sprzątanie niestandardowe)</span></h3>
     <table class="rtable"><thead><tr><th>Pokój</th>${keys.map((k) => `<th>${labels[k]}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table>
   </section>`;
 }
