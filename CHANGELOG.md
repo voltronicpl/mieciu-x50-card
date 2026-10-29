@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.2.0] — niewydane
+## [1.2.0] — 2026-10-29
 ### Dodane
 - Tryb **Strefa**: rysowanie do 4 stref na mapie, powtórzenia 1–3×, sprzątanie stref; lista stref w Pomieszczenia → Strefy.
 - Tryb **Punkt**: „Jedź tutaj” i „Sprzątaj punkt”.
