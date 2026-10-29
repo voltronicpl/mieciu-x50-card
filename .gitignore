@@ -1,0 +1,7 @@
+node_modules/
+*.log
+.DS_Store
+# prywatne eksporty / tokeny — nigdy do repo
+export*.json
+states*.json
+*.private.*

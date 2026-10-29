@@ -1,0 +1,12 @@
+{
+  "name": "mieciu-x50-card",
+  "version": "0.1.0",
+  "description": "Holograficzna karta Lovelace dla Dreame X50 Ultra (Home Assistant, integracja Tasshack dreame-vacuum)",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test tests/*.test.mjs"
+  }
+}
