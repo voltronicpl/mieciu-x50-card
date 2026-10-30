@@ -430,7 +430,18 @@ class MieciuX50Card extends HTMLElement {
       switch (act) {
         case 'tab': this._ui.tab = el.dataset.tab; this._view.z = null; this._schedule(); break;
         case 'advtab': this._ui.advTab = el.dataset.tab; this._schedule(); break;
-        case 'start': this._call(() => Commands.start(hass, vac), 'Start'); break;
+        case 'start': {
+          // zaznaczone pokoje (i nie wznawiamy pauzy) -> sprzątaj tylko je
+          const seg = [...this._ui.selected];
+          const paused = deriveRobotVisualState(hass.states[vac]) === 'paused';
+          if (seg.length && !paused && Commands.canCleanSegments(hass)) {
+            this._call(async () => { await Commands.cleanSegments(hass, vac, seg); this._ui.selected.clear(); }, `Sprzątanie ${seg.length} pom.`);
+          } else this._call(() => Commands.start(hass, vac), paused ? 'Wznowiono' : 'Start');
+          break;
+        }
+        case 'stop':
+          if (!window.confirm('Zatrzymać sprzątanie całkowicie?')) return;
+          this._call(() => Commands.stop(hass, vac), 'Zatrzymano'); break;
         case 'pause': this._call(() => Commands.pause(hass, vac), 'Pauza'); break;
         case 'dock': this._call(() => Commands.dock(hass, vac), 'Powrót do bazy'); break;
         case 'room': {
@@ -448,7 +459,7 @@ class MieciuX50Card extends HTMLElement {
         case 'clean-rooms': {
           const seg = [...this._ui.selected];
           if (!seg.length) return;
-          this._call(() => Commands.cleanSegments(hass, vac, seg), `Sprzątanie ${seg.length} pom.`);
+          this._call(async () => { await Commands.cleanSegments(hass, vac, seg); this._ui.selected.clear(); }, `Sprzątanie ${seg.length} pom.`);
           break;
         }
         case 'select': this._call(() => Commands.selectOption(hass, el.dataset.entity, el.dataset.option)); break;

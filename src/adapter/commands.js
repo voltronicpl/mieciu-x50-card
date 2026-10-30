@@ -23,6 +23,7 @@ export const Commands = {
 
   start: (hass, vac) => hass.callService('vacuum', 'start', { entity_id: vac }),
   pause: (hass, vac) => hass.callService('vacuum', 'pause', { entity_id: vac }),
+  stop: (hass, vac) => hass.callService('vacuum', 'stop', { entity_id: vac }),
   dock: (hass, vac) => hass.callService('vacuum', 'return_to_base', { entity_id: vac }),
 
   canCleanSegments: (hass) => hasService(hass, 'dreame_vacuum', 'vacuum_clean_segment'),

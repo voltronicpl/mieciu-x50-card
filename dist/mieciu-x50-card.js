@@ -1,4 +1,4 @@
-/*! Mieciu X50 Card v1.2.0 | MIT | https://github.com/voltronicpl/mieciu-x50-card — autorska karta Lovelace */
+/*! Mieciu X50 Card v1.2.1 | MIT | https://github.com/voltronicpl/mieciu-x50-card — autorska karta Lovelace */
 (() => {
 'use strict';
 
@@ -340,6 +340,7 @@ const Commands = {
 
   start: (hass, vac) => hass.callService('vacuum', 'start', { entity_id: vac }),
   pause: (hass, vac) => hass.callService('vacuum', 'pause', { entity_id: vac }),
+  stop: (hass, vac) => hass.callService('vacuum', 'stop', { entity_id: vac }),
   dock: (hass, vac) => hass.callService('vacuum', 'return_to_base', { entity_id: vac }),
 
   canCleanSegments: (hass) => hasService(hass, 'dreame_vacuum', 'vacuum_clean_segment'),
@@ -1177,7 +1178,7 @@ ha-icon { --mdc-icon-size: 20px; display: inline-flex; width: var(--mdc-icon-siz
 .rp-mode { display:flex; align-items:center; gap: 10px; margin-top: 8px; }
 .rp-mode ha-icon { --mdc-icon-size: 22px; color: var(--mx-cyan); }
 .rp-mode b { display:block; font-size: 12.5px; font-weight: 600; } .rp-mode span { font-size: 11px; color: var(--mx-dim); }
-.ctrl-row { display:grid; grid-template-columns: repeat(3, 1fr); gap: 10px; height: 100%; }
+.ctrl-row { display:grid; grid-template-columns: repeat(4, 1fr); gap: 10px; height: 100%; }
 .big { min-height: 120px; border-radius: 12px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap: 10px; font-size: 18px; font-weight: 500;
   background: linear-gradient(180deg, rgba(14,32,66,.9), rgba(6,16,36,.9)); box-shadow: 0 0 0 1px var(--mx-line), 0 0 16px rgba(31,125,255,.15) inset; }
 .big ha-icon { --mdc-icon-size: 40px; }
@@ -1702,8 +1703,9 @@ function renderRobot(c, visual) {
       <div class="rp-mode">${icon('mdi:robot-vacuum')}<div><b>${esc(optLabel(mode?.state))}</b><span>${esc(optLabel(suc?.state).toLowerCase())} / ${esc(optLabel(hum?.state).toLowerCase())}</span></div></div>
     </div>
     <div class="ctrl-row">
-      <button class="big primary ${visual === 'cleaning' ? 'lit' : ''}" data-act="start" ${dis}>${icon('mdi:play')}<span>${visual === 'paused' ? PL.generic.resume : PL.generic.start}</span></button>
+      <button class="big primary ${visual === 'cleaning' ? 'lit' : ''}" data-act="start" ${dis}>${icon('mdi:play')}<span>${visual === 'paused' ? PL.generic.resume : c.ui.selected.size ? `${PL.generic.start} (${c.ui.selected.size} pok.)` : PL.generic.start}</span></button>
       <button class="big" data-act="pause" ${dis || (visual !== 'cleaning' && visual !== 'returning' ? 'disabled' : '')}>${icon('mdi:pause')}<span>${PL.generic.pause}</span></button>
+      <button class="big" data-act="stop" ${dis || (!running ? 'disabled' : '')}>${icon('mdi:stop')}<span>Stop</span></button>
       <button class="big" data-act="dock" ${dis}>${icon('mdi:home')}<span>${PL.generic.dock}</span></button>
     </div>
   </section>`;
@@ -1977,7 +1979,7 @@ function renderRoomDetails(c) {
 
 
 
-const VERSION = '1.2.0';
+const VERSION = '1.2.1';
 
 // Minimalny „morph”: aktualizuje istniejący DOM do nowego HTML bez jego
 // przebudowy. Zachowuje obrazki, canvas mapy, fokus i wysokość karty.
@@ -2398,7 +2400,18 @@ class MieciuX50Card extends HTMLElement {
       switch (act) {
         case 'tab': this._ui.tab = el.dataset.tab; this._view.z = null; this._schedule(); break;
         case 'advtab': this._ui.advTab = el.dataset.tab; this._schedule(); break;
-        case 'start': this._call(() => Commands.start(hass, vac), 'Start'); break;
+        case 'start': {
+          // zaznaczone pokoje (i nie wznawiamy pauzy) -> sprzątaj tylko je
+          const seg = [...this._ui.selected];
+          const paused = deriveRobotVisualState(hass.states[vac]) === 'paused';
+          if (seg.length && !paused && Commands.canCleanSegments(hass)) {
+            this._call(async () => { await Commands.cleanSegments(hass, vac, seg); this._ui.selected.clear(); }, `Sprzątanie ${seg.length} pom.`);
+          } else this._call(() => Commands.start(hass, vac), paused ? 'Wznowiono' : 'Start');
+          break;
+        }
+        case 'stop':
+          if (!window.confirm('Zatrzymać sprzątanie całkowicie?')) return;
+          this._call(() => Commands.stop(hass, vac), 'Zatrzymano'); break;
         case 'pause': this._call(() => Commands.pause(hass, vac), 'Pauza'); break;
         case 'dock': this._call(() => Commands.dock(hass, vac), 'Powrót do bazy'); break;
         case 'room': {
@@ -2416,7 +2429,7 @@ class MieciuX50Card extends HTMLElement {
         case 'clean-rooms': {
           const seg = [...this._ui.selected];
           if (!seg.length) return;
-          this._call(() => Commands.cleanSegments(hass, vac, seg), `Sprzątanie ${seg.length} pom.`);
+          this._call(async () => { await Commands.cleanSegments(hass, vac, seg); this._ui.selected.clear(); }, `Sprzątanie ${seg.length} pom.`);
           break;
         }
         case 'select': this._call(() => Commands.selectOption(hass, el.dataset.entity, el.dataset.option)); break;

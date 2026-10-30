@@ -269,7 +269,7 @@ ha-icon { --mdc-icon-size: 20px; display: inline-flex; width: var(--mdc-icon-siz
 .rp-mode { display:flex; align-items:center; gap: 10px; margin-top: 8px; }
 .rp-mode ha-icon { --mdc-icon-size: 22px; color: var(--mx-cyan); }
 .rp-mode b { display:block; font-size: 12.5px; font-weight: 600; } .rp-mode span { font-size: 11px; color: var(--mx-dim); }
-.ctrl-row { display:grid; grid-template-columns: repeat(3, 1fr); gap: 10px; height: 100%; }
+.ctrl-row { display:grid; grid-template-columns: repeat(4, 1fr); gap: 10px; height: 100%; }
 .big { min-height: 120px; border-radius: 12px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap: 10px; font-size: 18px; font-weight: 500;
   background: linear-gradient(180deg, rgba(14,32,66,.9), rgba(6,16,36,.9)); box-shadow: 0 0 0 1px var(--mx-line), 0 0 16px rgba(31,125,255,.15) inset; }
 .big ha-icon { --mdc-icon-size: 40px; }

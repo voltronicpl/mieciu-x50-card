@@ -339,8 +339,9 @@ export function renderRobot(c, visual) {
       <div class="rp-mode">${icon('mdi:robot-vacuum')}<div><b>${esc(optLabel(mode?.state))}</b><span>${esc(optLabel(suc?.state).toLowerCase())} / ${esc(optLabel(hum?.state).toLowerCase())}</span></div></div>
     </div>
     <div class="ctrl-row">
-      <button class="big primary ${visual === 'cleaning' ? 'lit' : ''}" data-act="start" ${dis}>${icon('mdi:play')}<span>${visual === 'paused' ? PL.generic.resume : PL.generic.start}</span></button>
+      <button class="big primary ${visual === 'cleaning' ? 'lit' : ''}" data-act="start" ${dis}>${icon('mdi:play')}<span>${visual === 'paused' ? PL.generic.resume : c.ui.selected.size ? `${PL.generic.start} (${c.ui.selected.size} pok.)` : PL.generic.start}</span></button>
       <button class="big" data-act="pause" ${dis || (visual !== 'cleaning' && visual !== 'returning' ? 'disabled' : '')}>${icon('mdi:pause')}<span>${PL.generic.pause}</span></button>
+      <button class="big" data-act="stop" ${dis || (!running ? 'disabled' : '')}>${icon('mdi:stop')}<span>Stop</span></button>
       <button class="big" data-act="dock" ${dis}>${icon('mdi:home')}<span>${PL.generic.dock}</span></button>
     </div>
   </section>`;

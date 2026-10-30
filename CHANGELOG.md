@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.2.1] — 2026-10-30
+### Naprawione
+- Start przy zaznaczonych pokojach sprząta tylko je (wcześniej cały dom). Bez zaznaczenia — jak dotąd cały dom; przy pauzie — wznawia.
+### Dodane
+- Przycisk **Stop** (`vacuum.stop`) obok Pauzy i Do bazy, z potwierdzeniem; aktywny tylko podczas sprzątania / pauzy / powrotu.
+
 ## [1.2.0] — 2026-10-29
 ### Dodane
 - Tryb **Strefa**: rysowanie do 4 stref na mapie, powtórzenia 1–3×, sprzątanie stref; lista stref w Pomieszczenia → Strefy.
